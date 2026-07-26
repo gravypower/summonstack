@@ -1,0 +1,86 @@
+# Download server for the game client.
+#
+# The client zip is ~18 GB, so this is deliberately a plain nginx static server
+# rather than the Next.js app: sendfile plus native Range support means large,
+# resumable downloads never touch the Node process.
+#
+# Rendered by the nginx image's envsubst entrypoint — only the variables listed
+# in NGINX_ENVSUBST_VARS (see docker-compose.yml) are substituted, so nginx's
+# own $-variables survive.
+
+server {
+    listen 80;
+    server_name _;
+
+    sendfile on;
+    tcp_nopush on;
+    # Multi-GB responses can legitimately stall on a slow client.
+    send_timeout 15m;
+    keepalive_timeout 75s;
+
+    access_log /var/log/nginx/access.log;
+
+    # Auth is delegated to the portal so this container needs no DB access.
+    # Cookies are not port-scoped, so the player's ss_session cookie arrives
+    # here even though the portal is served on a different port.
+    # Docker's embedded DNS. Resolving through a variable below keeps the
+    # upstream looked up per request, so this container still starts when the
+    # portal is down and survives ac-webapp being recreated on a new IP.
+    resolver 127.0.0.11 ipv6=off valid=30s;
+
+    location = /_session_check {
+        internal;
+        set $portal ${PORTAL_INTERNAL_URL};
+        proxy_pass $portal/api/download/authorize;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header X-Original-URI $request_uri;
+    }
+
+    # The game client. Served from a fixed URL so swapping the underlying file
+    # (or its name) never breaks links players already have.
+    location = /files/client.zip {
+        auth_request /_session_check;
+        # Only auth_request failures produce 401, so a genuine 403 (e.g. the
+        # disabled directory index) is not mistaken for "please log in".
+        error_page 401 = @login;
+
+        alias /srv/client.zip;
+        default_type application/octet-stream;
+        add_header Content-Disposition 'attachment; filename="${CLIENT_ZIP_NAME}"' always;
+        # nginx emits Accept-Ranges itself for static files, so resumable
+        # downloads work without an explicit add_header here.
+    }
+
+    # Anything dropped in downloads/files/ on the host.
+    location /files/ {
+        auth_request /_session_check;
+
+        # Anyone not logged in is sent to the portal login rather than being
+        # shown a bare 401.
+        # Only auth_request failures produce 401, so a genuine 403 (e.g. the
+        # disabled directory index) is not mistaken for "please log in".
+        error_page 401 = @login;
+
+        alias /srv/downloads/;
+        autoindex off;
+
+        # Serve as a download instead of letting the browser guess.
+        types { }
+        default_type application/octet-stream;
+        add_header Content-Disposition "attachment" always;
+    }
+
+    location @login {
+        return 302 ${SITE_URL}/login;
+    }
+
+    location = /healthz {
+        access_log off;
+        return 200 "ok\n";
+    }
+
+    location / {
+        return 404;
+    }
+}

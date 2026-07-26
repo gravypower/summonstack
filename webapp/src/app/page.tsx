@@ -1,6 +1,19 @@
+import Link from "next/link";
 import { getServerStatus } from "@/lib/status";
+import { getSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
+
+// Display only — update alongside the file mounted into ac-downloads.
+const CLIENT_SIZE = "~16.5 GB";
+
+function downloadUrl(): string {
+  const base = (process.env.DOWNLOAD_URL || "http://localhost:8081").replace(
+    /\/$/,
+    ""
+  );
+  return `${base}/files/client.zip`;
+}
 
 function formatUptime(seconds: number): string {
   const d = Math.floor(seconds / 86400);
@@ -13,6 +26,7 @@ function formatUptime(seconds: number): string {
 
 export default async function HomePage() {
   const status = await getServerStatus();
+  const session = await getSession();
   const realmlist = status.realmAddress
     ? `set realmlist ${status.realmAddress}`
     : "set realmlist 127.0.0.1";
@@ -53,9 +67,35 @@ export default async function HomePage() {
       </div>
 
       <div className="card">
+        <h2>Game client</h2>
+        {session ? (
+          <>
+            <p className="muted">
+              The full 3.3.5a client, ready to play — no patching needed. The
+              download resumes if it gets interrupted, so you can pause and
+              come back to it.
+            </p>
+            <p>
+              <a className="btn" href={downloadUrl()}>
+                Download client ({CLIENT_SIZE})
+              </a>
+            </p>
+          </>
+        ) : (
+          <p className="muted">
+            <Link href="/login">Log in</Link> to download the game client. If
+            you do not have an account yet, ask an admin for an invite link.
+          </p>
+        )}
+      </div>
+
+      <div className="card">
         <h2>How to connect</h2>
         <ol>
-          <li>Install a World of Warcraft 3.3.5a (WotLK) client.</li>
+          <li>
+            Download and unzip the 3.3.5a client above (or use your own WotLK
+            client).
+          </li>
           <li>
             Open <code className="mono">Data/enUS/realmlist.wtf</code> (or your
             locale folder) in the client directory and replace its contents

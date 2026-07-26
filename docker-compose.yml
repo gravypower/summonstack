@@ -47,7 +47,7 @@ services:
       ac-database:
         condition: service_healthy
 
-  # One-shot: downloads maps/vmaps/mmaps/dbc (~15 GB) into the shared volume.
+  # One-shot: downloads maps/vmaps/mmaps/dbc (~3 GB) into the shared volume.
   ac-client-data-init:
     container_name: ac-client-data-init
     image: acore/ac-wotlk-client-data:${DOCKER_IMAGE_TAG:-master}
@@ -124,6 +124,7 @@ services:
       SOAP_PASS: ${SOAP_PASS:-}
       SESSION_SECRET: ${SESSION_SECRET:-please-change-me}
       SITE_URL: ${SITE_URL:-http://localhost:8080}
+      DOWNLOAD_URL: ${DOWNLOAD_URL:-http://localhost:8081}
       AUTH_HOST: ac-authserver
       AUTH_PORT: "3724"
       WORLD_HOST: ac-worldserver
@@ -133,6 +134,33 @@ services:
     depends_on:
       ac-database:
         condition: service_healthy
+
+  # Serves the game client zip. Kept separate from ac-webapp so an ~18 GB
+  # download streams straight off disk via sendfile instead of through Node.
+  ac-downloads:
+    container_name: ac-downloads
+    image: nginx:1.27-alpine
+    networks:
+      - ac-network
+    restart: unless-stopped
+    environment:
+      SITE_URL: ${SITE_URL:-http://localhost:8080}
+      PORTAL_INTERNAL_URL: http://ac-webapp:3000
+      # Filename the browser saves the client as; the URL stays /files/client.zip.
+      CLIENT_ZIP_NAME: ${CLIENT_ZIP_NAME:-ChromieCraft_3.3.5a.zip}
+      # Without this, envsubst would also eat nginx's own $variables.
+      NGINX_ENVSUBST_VARS: "SITE_URL PORTAL_INTERNAL_URL CLIENT_ZIP_NAME"
+    volumes:
+      - ./downloads/nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
+      # Drop any extra file in downloads/files/ to publish it at /files/<name>.
+      - ./downloads/files:/srv/downloads:ro
+      # Mounted outside /srv/downloads: a bind mount nested inside a read-only
+      # directory mount cannot create its own mountpoint.
+      - ${CLIENT_ZIP_PATH:-./ChromieCraft_3.3.5a.zip}:/srv/client.zip:ro
+    ports:
+      - ${DOCKER_DOWNLOAD_EXTERNAL_PORT:-8081}:80
+    depends_on:
+      - ac-webapp
 
 volumes:
   ac-database:
