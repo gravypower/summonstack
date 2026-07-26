@@ -18,6 +18,12 @@ function unescapeXml(value: string): string {
 export interface SoapResult {
   success: boolean;
   output: string;
+  /**
+   * True when the request never reached the worldserver (or timed out), so
+   * the command's effect is unknown. A SOAP fault leaves this unset: the
+   * server was reached and definitively rejected the command.
+   */
+  unreachable?: boolean;
 }
 
 /**
@@ -60,6 +66,7 @@ export async function soapCommand(command: string): Promise<SoapResult> {
   } catch (err) {
     return {
       success: false,
+      unreachable: true,
       output: `Could not reach worldserver SOAP (${(err as Error).message}). Is the worldserver running?`,
     };
   }
