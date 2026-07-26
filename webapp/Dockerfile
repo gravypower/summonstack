@@ -31,6 +31,8 @@ COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/public ./public
 COPY --from=build /app/scripts ./scripts
+# Shop pack definitions, read by scripts/seed-shop.mjs at seed time.
+COPY --from=build /app/data ./data
 # Resolved ahead of /app/node_modules for anything under scripts/, so this
 # leaves the traced standalone modules untouched.
 COPY --from=script-deps /deps/node_modules ./scripts/node_modules

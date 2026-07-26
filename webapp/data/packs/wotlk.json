@@ -1,0 +1,385 @@
+{
+  "slug": "wotlk",
+  "name": "WotLK Starter Pack (80)",
+  "level_cap": 80,
+  "min_level": 80,
+  "consumables": [
+    { "item_id": 46377, "count": 5, "note": "Flask of Endless Rage" },
+    { "item_id": 46379, "count": 5, "note": "Flask of Stoneblood" },
+    { "item_id": 40211, "count": 20, "note": "Potion of Speed" },
+    { "item_id": 33447, "count": 20, "note": "Runic Healing Potion" },
+    { "item_id": 33448, "count": 20, "note": "Runic Mana Potion" },
+    { "item_id": 43015, "count": 20, "note": "Fish Feast" }
+  ],
+  "classes": {
+    "warrior": {
+      "class_consumables": [],
+      "specs": {
+        "fury": {
+          "gear": [
+            { "item_id": 41386, "slot": "head", "note": "Spiked Titansteel Helm" },
+            { "item_id": 40678, "slot": "neck", "note": "Pendant of the Outcast Hero" },
+            { "item_id": 39249, "slot": "shoulder", "note": "Shoulderplates of Bloodshed" },
+            { "item_id": 43565, "slot": "back", "note": "Durable Nerubhide Cape" },
+            { "item_id": 39239, "slot": "chest", "note": "Chestplate of the Risen Soldier" },
+            { "item_id": 37668, "slot": "wrist", "note": "Bands of the Stoneforge" },
+            { "item_id": 37363, "slot": "hands", "note": "Gauntlets of Dragon Wrath" },
+            { "item_id": 37171, "slot": "waist", "note": "Flame-Bathed Steel Girdle" },
+            { "item_id": 37193, "slot": "legs", "note": "Staggering Legplates" },
+            { "item_id": 39139, "slot": "feet", "note": "Ravaging Sabatons" },
+            { "item_id": 39401, "slot": "ring1", "note": "Circle of Death" },
+            { "item_id": 37784, "slot": "ring2", "note": "Keystone Great-Ring" },
+            { "item_id": 40684, "slot": "trinket1", "note": "Mirror of Truth" },
+            { "item_id": 37723, "slot": "trinket2", "note": "Incisor Fragment" },
+            { "item_id": 41383, "slot": "mainhand", "note": "Titansteel Bonecrusher" },
+            { "item_id": 39270, "slot": "offhand", "note": "Hatestrike" }
+          ]
+        },
+        "protection": {
+          "gear": [
+            { "item_id": 39395, "slot": "head", "note": "Thane's Tainted Greathelm" },
+            { "item_id": 39246, "slot": "neck", "note": "Amulet of Autopsy" },
+            { "item_id": 39267, "slot": "shoulder", "note": "Abomination Shoulderblades" },
+            { "item_id": 43988, "slot": "back", "note": "Gale-Proof Cloak" },
+            { "item_id": 39398, "slot": "chest", "note": "Massive Skeletal Ribcage" },
+            { "item_id": 37620, "slot": "wrist", "note": "Bracers of the Herald" },
+            { "item_id": 37645, "slot": "hands", "note": "Horn-Tipped Gauntlets" },
+            { "item_id": 37241, "slot": "waist", "note": "Ancient Aligned Girdle" },
+            { "item_id": 39258, "slot": "legs", "note": "Legplates of Inescapable Death" },
+            { "item_id": 39234, "slot": "feet", "note": "Plague-Impervious Boots" },
+            { "item_id": 39141, "slot": "ring1", "note": "Deflection Band" },
+            { "item_id": 40426, "slot": "ring2", "note": "Signet of the Accord" },
+            { "item_id": 37220, "slot": "trinket1", "note": "Essence of Gossamer" },
+            { "item_id": 37401, "slot": "mainhand", "note": "Red Sword of Courage" },
+            { "item_id": 39276, "slot": "shield", "note": "The Skull of Ruin" }
+          ]
+        }
+      }
+    },
+    "paladin": {
+      "class_consumables": [],
+      "specs": {
+        "holy": {
+          "gear": [
+            { "item_id": 41388, "slot": "head", "note": "Brilliant Titansteel Helm" },
+            { "item_id": 40680, "slot": "neck", "note": "Encircling Burnished Gold Chains" },
+            { "item_id": 41609, "slot": "back", "note": "Wispcloak" },
+            { "item_id": 47178, "slot": "chest", "note": "Carapace of Grim Visions (mail)" },
+            { "item_id": 44204, "slot": "hands", "note": "Grips of Fierce Pronouncements (mail)" },
+            { "item_id": 44305, "slot": "legs", "note": "Kilt of Dark Mercy (mail)" },
+            { "item_id": 41394, "slot": "feet", "note": "Brilliant Titansteel Treads" },
+            { "item_id": 47200, "slot": "ring1", "note": "Signet of Purity" },
+            { "item_id": 44283, "slot": "ring2", "note": "Signet of Hopeful Light" },
+            { "item_id": 37111, "slot": "trinket1", "note": "Soul Preserver" },
+            { "item_id": 37835, "slot": "trinket2", "note": "Je'Tze's Bell" },
+            { "item_id": 41384, "slot": "mainhand", "note": "Titansteel Guardian" },
+            { "item_id": 44313, "slot": "shield", "note": "Zom's Crackling Bulwark" }
+          ]
+        },
+        "protection": {
+          "gear": [
+            { "item_id": 39395, "slot": "head", "note": "Thane's Tainted Greathelm" },
+            { "item_id": 39246, "slot": "neck", "note": "Amulet of Autopsy" },
+            { "item_id": 39267, "slot": "shoulder", "note": "Abomination Shoulderblades" },
+            { "item_id": 43988, "slot": "back", "note": "Gale-Proof Cloak" },
+            { "item_id": 39398, "slot": "chest", "note": "Massive Skeletal Ribcage" },
+            { "item_id": 37620, "slot": "wrist", "note": "Bracers of the Herald" },
+            { "item_id": 37645, "slot": "hands", "note": "Horn-Tipped Gauntlets" },
+            { "item_id": 37241, "slot": "waist", "note": "Ancient Aligned Girdle" },
+            { "item_id": 39258, "slot": "legs", "note": "Legplates of Inescapable Death" },
+            { "item_id": 39234, "slot": "feet", "note": "Plague-Impervious Boots" },
+            { "item_id": 39141, "slot": "ring1", "note": "Deflection Band" },
+            { "item_id": 40426, "slot": "ring2", "note": "Signet of the Accord" },
+            { "item_id": 37220, "slot": "trinket1", "note": "Essence of Gossamer" },
+            { "item_id": 37401, "slot": "mainhand", "note": "Red Sword of Courage" },
+            { "item_id": 39276, "slot": "shield", "note": "The Skull of Ruin" }
+          ]
+        },
+        "retribution": {
+          "gear": [
+            { "item_id": 41386, "slot": "head", "note": "Spiked Titansteel Helm" },
+            { "item_id": 40678, "slot": "neck", "note": "Pendant of the Outcast Hero" },
+            { "item_id": 39249, "slot": "shoulder", "note": "Shoulderplates of Bloodshed" },
+            { "item_id": 43565, "slot": "back", "note": "Durable Nerubhide Cape" },
+            { "item_id": 39239, "slot": "chest", "note": "Chestplate of the Risen Soldier" },
+            { "item_id": 37668, "slot": "wrist", "note": "Bands of the Stoneforge" },
+            { "item_id": 37363, "slot": "hands", "note": "Gauntlets of Dragon Wrath" },
+            { "item_id": 37171, "slot": "waist", "note": "Flame-Bathed Steel Girdle" },
+            { "item_id": 37193, "slot": "legs", "note": "Staggering Legplates" },
+            { "item_id": 39139, "slot": "feet", "note": "Ravaging Sabatons" },
+            { "item_id": 39401, "slot": "ring1", "note": "Circle of Death" },
+            { "item_id": 37784, "slot": "ring2", "note": "Keystone Great-Ring" },
+            { "item_id": 40684, "slot": "trinket1", "note": "Mirror of Truth" },
+            { "item_id": 37723, "slot": "trinket2", "note": "Incisor Fragment" },
+            { "item_id": 41257, "slot": "mainhand", "note": "Titansteel Destroyer (2H)" }
+          ]
+        }
+      }
+    },
+    "hunter": {
+      "class_consumables": [],
+      "specs": {
+        "dps": {
+          "gear": [
+            { "item_id": 39294, "slot": "head", "note": "Arc-Scorched Helmet" },
+            { "item_id": 40678, "slot": "neck", "note": "Pendant of the Outcast Hero" },
+            { "item_id": 39397, "slot": "shoulder", "note": "Pauldrons of Havoc" },
+            { "item_id": 39297, "slot": "back", "note": "Cloak of Darkening" },
+            { "item_id": 39248, "slot": "chest", "note": "Tunic of the Lost Pack" },
+            { "item_id": 37170, "slot": "wrist", "note": "Interwoven Scale Bracers" },
+            { "item_id": 37886, "slot": "hands", "note": "Handgrips of the Savage Emissary" },
+            { "item_id": 37407, "slot": "waist", "note": "Sovereign's Belt" },
+            { "item_id": 37669, "slot": "legs", "note": "Leggings of the Stone Halls" },
+            { "item_id": 39236, "slot": "feet", "note": "Trespasser's Boots" },
+            { "item_id": 37642, "slot": "ring1", "note": "Hemorrhaging Circle" },
+            { "item_id": 39277, "slot": "ring2", "note": "Sealing Ring of Grobbulus" },
+            { "item_id": 40684, "slot": "trinket1", "note": "Mirror of Truth" },
+            { "item_id": 37390, "slot": "trinket2", "note": "Meteorite Whetstone" },
+            { "item_id": 37883, "slot": "mainhand", "note": "Staff of Trickery" },
+            { "item_id": 37191, "slot": "ranged", "note": "Drake-Mounted Crossbow" }
+          ]
+        }
+      }
+    },
+    "rogue": {
+      "class_consumables": [],
+      "specs": {
+        "dps": {
+          "gear": [
+            { "item_id": 39399, "slot": "head", "note": "Helm of the Vast Legions" },
+            { "item_id": 40678, "slot": "neck", "note": "Pendant of the Outcast Hero" },
+            { "item_id": 39237, "slot": "shoulder", "note": "Spaulders of Resumed Battle" },
+            { "item_id": 39297, "slot": "back", "note": "Cloak of Darkening" },
+            { "item_id": 39386, "slot": "chest", "note": "Tunic of Dislocation" },
+            { "item_id": 37853, "slot": "wrist", "note": "Advanced Tooled-Leather Bands" },
+            { "item_id": 37409, "slot": "hands", "note": "Gilt-Edged Leather Gauntlets" },
+            { "item_id": 37194, "slot": "waist", "note": "Sharp-Barbed Leather Belt" },
+            { "item_id": 37644, "slot": "legs", "note": "Gored Hide Legguards" },
+            { "item_id": 39196, "slot": "feet", "note": "Boots of the Worshiper" },
+            { "item_id": 37642, "slot": "ring1", "note": "Hemorrhaging Circle" },
+            { "item_id": 39277, "slot": "ring2", "note": "Sealing Ring of Grobbulus" },
+            { "item_id": 40684, "slot": "trinket1", "note": "Mirror of Truth" },
+            { "item_id": 37390, "slot": "trinket2", "note": "Meteorite Whetstone" },
+            { "item_id": 39140, "slot": "mainhand", "note": "Knife of Incision" },
+            { "item_id": 37667, "slot": "offhand", "note": "The Fleshshaper" }
+          ]
+        }
+      }
+    },
+    "priest": {
+      "class_consumables": [],
+      "specs": {
+        "healing": {
+          "gear": [
+            { "item_id": 39409, "slot": "head", "note": "Cowl of Winged Fear" },
+            { "item_id": 40680, "slot": "neck", "note": "Encircling Burnished Gold Chains" },
+            { "item_id": 43973, "slot": "shoulder", "note": "Frostsavage Shoulders" },
+            { "item_id": 41609, "slot": "back", "note": "Wispcloak" },
+            { "item_id": 42100, "slot": "chest", "note": "Moonshroud Robe" },
+            { "item_id": 47173, "slot": "wrist", "note": "Bindings of the Wicked" },
+            { "item_id": 42103, "slot": "hands", "note": "Moonshroud Gloves" },
+            { "item_id": 44309, "slot": "waist", "note": "Sash of Jordan" },
+            { "item_id": 47185, "slot": "legs", "note": "Leggings of the Haggard Apprentice" },
+            { "item_id": 40269, "slot": "feet", "note": "Boots of Persuasion" },
+            { "item_id": 47200, "slot": "ring1", "note": "Signet of Purity" },
+            { "item_id": 44283, "slot": "ring2", "note": "Signet of Hopeful Light" },
+            { "item_id": 37111, "slot": "trinket1", "note": "Soul Preserver" },
+            { "item_id": 37835, "slot": "trinket2", "note": "Je'Tze's Bell" },
+            { "item_id": 41384, "slot": "mainhand", "note": "Titansteel Guardian" },
+            { "item_id": 37619, "slot": "ranged", "note": "Wand of Ahn'kahet" }
+          ]
+        },
+        "shadow": {
+          "gear": [
+            { "item_id": 39295, "slot": "head", "note": "Cowl of Sheet Lightning" },
+            { "item_id": 40681, "slot": "neck", "note": "Lattice Choker of Light" },
+            { "item_id": 47226, "slot": "shoulder", "note": "Mantle of Inconsolable Fear" },
+            { "item_id": 41609, "slot": "back", "note": "Wispcloak" },
+            { "item_id": 42101, "slot": "chest", "note": "Ebonweave Robe" },
+            { "item_id": 47173, "slot": "wrist", "note": "Bindings of the Wicked" },
+            { "item_id": 42111, "slot": "hands", "note": "Ebonweave Gloves" },
+            { "item_id": 44302, "slot": "waist", "note": "Belt of Dark Mending" },
+            { "item_id": 44931, "slot": "legs", "note": "Windripper Leggings" },
+            { "item_id": 44202, "slot": "feet", "note": "Sandals of Crimson Fury" },
+            { "item_id": 42644, "slot": "ring1", "note": "Titanium Spellshock Ring" },
+            { "item_id": 44283, "slot": "ring2", "note": "Signet of Hopeful Light" },
+            { "item_id": 40682, "slot": "trinket1", "note": "Sundial of the Exiled" },
+            { "item_id": 37660, "slot": "trinket2", "note": "Forge Ember" },
+            { "item_id": 45085, "slot": "mainhand", "note": "Titansteel Spellblade" },
+            { "item_id": 37238, "slot": "ranged", "note": "Rod of the Fallen Monarch" }
+          ]
+        }
+      }
+    },
+    "shaman": {
+      "class_consumables": [],
+      "specs": {
+        "healing": {
+          "gear": [
+            { "item_id": 47217, "slot": "head", "note": "Gaze of the Somber Keeper" },
+            { "item_id": 40680, "slot": "neck", "note": "Encircling Burnished Gold Chains" },
+            { "item_id": 41609, "slot": "back", "note": "Wispcloak" },
+            { "item_id": 47178, "slot": "chest", "note": "Carapace of Grim Visions" },
+            { "item_id": 44204, "slot": "hands", "note": "Grips of Fierce Pronouncements" },
+            { "item_id": 47174, "slot": "waist", "note": "Binding of the Tranquil Glade" },
+            { "item_id": 44305, "slot": "legs", "note": "Kilt of Dark Mercy" },
+            { "item_id": 43502, "slot": "feet", "note": "Earthgiving Boots" },
+            { "item_id": 47200, "slot": "ring1", "note": "Signet of Purity" },
+            { "item_id": 44283, "slot": "ring2", "note": "Signet of Hopeful Light" },
+            { "item_id": 37111, "slot": "trinket1", "note": "Soul Preserver" },
+            { "item_id": 37835, "slot": "trinket2", "note": "Je'Tze's Bell" },
+            { "item_id": 41384, "slot": "mainhand", "note": "Titansteel Guardian" },
+            { "item_id": 44313, "slot": "shield", "note": "Zom's Crackling Bulwark" }
+          ]
+        },
+        "elemental": {
+          "gear": [
+            { "item_id": 39295, "slot": "head", "note": "Cowl of Sheet Lightning" },
+            { "item_id": 40681, "slot": "neck", "note": "Lattice Choker of Light" },
+            { "item_id": 41609, "slot": "back", "note": "Wispcloak" },
+            { "item_id": 43461, "slot": "chest", "note": "Revenant's Breastplate" },
+            { "item_id": 44204, "slot": "hands", "note": "Grips of Fierce Pronouncements" },
+            { "item_id": 47228, "slot": "legs", "note": "Leggings of the Bloodless Knight" },
+            { "item_id": 43469, "slot": "feet", "note": "Revenant's Treads" },
+            { "item_id": 42644, "slot": "ring1", "note": "Titanium Spellshock Ring" },
+            { "item_id": 44283, "slot": "ring2", "note": "Signet of Hopeful Light" },
+            { "item_id": 40682, "slot": "trinket1", "note": "Sundial of the Exiled" },
+            { "item_id": 37660, "slot": "trinket2", "note": "Forge Ember" },
+            { "item_id": 45085, "slot": "mainhand", "note": "Titansteel Spellblade" },
+            { "item_id": 44313, "slot": "shield", "note": "Zom's Crackling Bulwark" }
+          ]
+        },
+        "enhancement": {
+          "gear": [
+            { "item_id": 39294, "slot": "head", "note": "Arc-Scorched Helmet" },
+            { "item_id": 40678, "slot": "neck", "note": "Pendant of the Outcast Hero" },
+            { "item_id": 39397, "slot": "shoulder", "note": "Pauldrons of Havoc" },
+            { "item_id": 39297, "slot": "back", "note": "Cloak of Darkening" },
+            { "item_id": 39248, "slot": "chest", "note": "Tunic of the Lost Pack" },
+            { "item_id": 37170, "slot": "wrist", "note": "Interwoven Scale Bracers" },
+            { "item_id": 37886, "slot": "hands", "note": "Handgrips of the Savage Emissary" },
+            { "item_id": 37407, "slot": "waist", "note": "Sovereign's Belt" },
+            { "item_id": 37669, "slot": "legs", "note": "Leggings of the Stone Halls" },
+            { "item_id": 39236, "slot": "feet", "note": "Trespasser's Boots" },
+            { "item_id": 37642, "slot": "ring1", "note": "Hemorrhaging Circle" },
+            { "item_id": 39277, "slot": "ring2", "note": "Sealing Ring of Grobbulus" },
+            { "item_id": 40684, "slot": "trinket1", "note": "Mirror of Truth" },
+            { "item_id": 37390, "slot": "trinket2", "note": "Meteorite Whetstone" },
+            { "item_id": 39140, "slot": "mainhand", "note": "Knife of Incision" },
+            { "item_id": 45075, "slot": "offhand", "note": "Ironforge Smasher" }
+          ]
+        }
+      }
+    },
+    "mage": {
+      "class_consumables": [],
+      "specs": {
+        "dps": {
+          "gear": [
+            { "item_id": 39295, "slot": "head", "note": "Cowl of Sheet Lightning" },
+            { "item_id": 40681, "slot": "neck", "note": "Lattice Choker of Light" },
+            { "item_id": 47226, "slot": "shoulder", "note": "Mantle of Inconsolable Fear" },
+            { "item_id": 41609, "slot": "back", "note": "Wispcloak" },
+            { "item_id": 42101, "slot": "chest", "note": "Ebonweave Robe" },
+            { "item_id": 47173, "slot": "wrist", "note": "Bindings of the Wicked" },
+            { "item_id": 42111, "slot": "hands", "note": "Ebonweave Gloves" },
+            { "item_id": 44302, "slot": "waist", "note": "Belt of Dark Mending" },
+            { "item_id": 44931, "slot": "legs", "note": "Windripper Leggings" },
+            { "item_id": 44202, "slot": "feet", "note": "Sandals of Crimson Fury" },
+            { "item_id": 42644, "slot": "ring1", "note": "Titanium Spellshock Ring" },
+            { "item_id": 44283, "slot": "ring2", "note": "Signet of Hopeful Light" },
+            { "item_id": 40682, "slot": "trinket1", "note": "Sundial of the Exiled" },
+            { "item_id": 37660, "slot": "trinket2", "note": "Forge Ember" },
+            { "item_id": 45085, "slot": "mainhand", "note": "Titansteel Spellblade" },
+            { "item_id": 37238, "slot": "ranged", "note": "Rod of the Fallen Monarch" }
+          ]
+        }
+      }
+    },
+    "warlock": {
+      "class_consumables": [],
+      "specs": {
+        "dps": {
+          "gear": [
+            { "item_id": 39295, "slot": "head", "note": "Cowl of Sheet Lightning" },
+            { "item_id": 40681, "slot": "neck", "note": "Lattice Choker of Light" },
+            { "item_id": 47226, "slot": "shoulder", "note": "Mantle of Inconsolable Fear" },
+            { "item_id": 41609, "slot": "back", "note": "Wispcloak" },
+            { "item_id": 42101, "slot": "chest", "note": "Ebonweave Robe" },
+            { "item_id": 47173, "slot": "wrist", "note": "Bindings of the Wicked" },
+            { "item_id": 42111, "slot": "hands", "note": "Ebonweave Gloves" },
+            { "item_id": 44302, "slot": "waist", "note": "Belt of Dark Mending" },
+            { "item_id": 44931, "slot": "legs", "note": "Windripper Leggings" },
+            { "item_id": 44202, "slot": "feet", "note": "Sandals of Crimson Fury" },
+            { "item_id": 42644, "slot": "ring1", "note": "Titanium Spellshock Ring" },
+            { "item_id": 44283, "slot": "ring2", "note": "Signet of Hopeful Light" },
+            { "item_id": 40682, "slot": "trinket1", "note": "Sundial of the Exiled" },
+            { "item_id": 37660, "slot": "trinket2", "note": "Forge Ember" },
+            { "item_id": 45085, "slot": "mainhand", "note": "Titansteel Spellblade" },
+            { "item_id": 37238, "slot": "ranged", "note": "Rod of the Fallen Monarch" }
+          ]
+        }
+      }
+    },
+    "druid": {
+      "class_consumables": [],
+      "specs": {
+        "healing": {
+          "gear": [
+            { "item_id": 47217, "slot": "head", "note": "Gaze of the Somber Keeper" },
+            { "item_id": 40680, "slot": "neck", "note": "Encircling Burnished Gold Chains" },
+            { "item_id": 41609, "slot": "back", "note": "Wispcloak" },
+            { "item_id": 37587, "slot": "chest", "note": "Ymirjar Physician's Robe" },
+            { "item_id": 47174, "slot": "waist", "note": "Binding of the Tranquil Glade" },
+            { "item_id": 43495, "slot": "legs", "note": "Earthgiving Legguards" },
+            { "item_id": 43502, "slot": "feet", "note": "Earthgiving Boots" },
+            { "item_id": 47200, "slot": "ring1", "note": "Signet of Purity" },
+            { "item_id": 44283, "slot": "ring2", "note": "Signet of Hopeful Light" },
+            { "item_id": 37111, "slot": "trinket1", "note": "Soul Preserver" },
+            { "item_id": 37835, "slot": "trinket2", "note": "Je'Tze's Bell" },
+            { "item_id": 41384, "slot": "mainhand", "note": "Titansteel Guardian" },
+            { "item_id": 37619, "slot": "ranged", "note": "Wand of Ahn'kahet (idol slot empty)" }
+          ]
+        },
+        "feral": {
+          "gear": [
+            { "item_id": 39399, "slot": "head", "note": "Helm of the Vast Legions" },
+            { "item_id": 40678, "slot": "neck", "note": "Pendant of the Outcast Hero" },
+            { "item_id": 39237, "slot": "shoulder", "note": "Spaulders of Resumed Battle" },
+            { "item_id": 39297, "slot": "back", "note": "Cloak of Darkening" },
+            { "item_id": 39386, "slot": "chest", "note": "Tunic of Dislocation" },
+            { "item_id": 37853, "slot": "wrist", "note": "Advanced Tooled-Leather Bands" },
+            { "item_id": 37409, "slot": "hands", "note": "Gilt-Edged Leather Gauntlets" },
+            { "item_id": 37194, "slot": "waist", "note": "Sharp-Barbed Leather Belt" },
+            { "item_id": 37644, "slot": "legs", "note": "Gored Hide Legguards" },
+            { "item_id": 39196, "slot": "feet", "note": "Boots of the Worshiper" },
+            { "item_id": 37642, "slot": "ring1", "note": "Hemorrhaging Circle" },
+            { "item_id": 39277, "slot": "ring2", "note": "Sealing Ring of Grobbulus" },
+            { "item_id": 40684, "slot": "trinket1", "note": "Mirror of Truth" },
+            { "item_id": 37390, "slot": "trinket2", "note": "Meteorite Whetstone" },
+            { "item_id": 40280, "slot": "mainhand", "note": "Origin of Nightmares" }
+          ]
+        },
+        "balance": {
+          "gear": [
+            { "item_id": 39295, "slot": "head", "note": "Cowl of Sheet Lightning" },
+            { "item_id": 40681, "slot": "neck", "note": "Lattice Choker of Light" },
+            { "item_id": 47210, "slot": "shoulder", "note": "Mantle of Gnarled Overgrowth" },
+            { "item_id": 41609, "slot": "back", "note": "Wispcloak" },
+            { "item_id": 42101, "slot": "chest", "note": "Ebonweave Robe" },
+            { "item_id": 47173, "slot": "wrist", "note": "Bindings of the Wicked" },
+            { "item_id": 42111, "slot": "hands", "note": "Ebonweave Gloves" },
+            { "item_id": 44181, "slot": "waist", "note": "Ghostflicker Waistband" },
+            { "item_id": 44931, "slot": "legs", "note": "Windripper Leggings" },
+            { "item_id": 44930, "slot": "feet", "note": "Windripper Boots" },
+            { "item_id": 42644, "slot": "ring1", "note": "Titanium Spellshock Ring" },
+            { "item_id": 44283, "slot": "ring2", "note": "Signet of Hopeful Light" },
+            { "item_id": 40682, "slot": "trinket1", "note": "Sundial of the Exiled" },
+            { "item_id": 37660, "slot": "trinket2", "note": "Forge Ember" },
+            { "item_id": 45085, "slot": "mainhand", "note": "Titansteel Spellblade" }
+          ]
+        }
+      }
+    }
+  }
+}

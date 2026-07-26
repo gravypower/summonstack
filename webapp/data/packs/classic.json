@@ -1,0 +1,323 @@
+{
+  "slug": "classic",
+  "name": "Classic Starter Pack (60)",
+  "level_cap": 60,
+  "min_level": 60,
+  "consumables": [
+    { "item_id": 13452, "count": 10, "note": "Elixir of the Mongoose" },
+    { "item_id": 13510, "count": 5, "note": "Flask of the Titans" },
+    { "item_id": 13446, "count": 20, "note": "Major Healing Potion" },
+    { "item_id": 13444, "count": 20, "note": "Major Mana Potion" }
+  ],
+  "classes": {
+    "warrior": {
+      "class_consumables": [],
+      "specs": {
+        "fury": {
+          "gear": [
+            { "item_id": 12640, "slot": "head", "note": "Lionheart Helm" },
+            { "item_id": 15411, "slot": "neck", "note": "Mark of Fordring" },
+            { "item_id": 12927, "slot": "shoulder", "note": "Truestrike Shoulders" },
+            { "item_id": 13340, "slot": "back", "note": "Cape of the Black Baron" },
+            { "item_id": 11726, "slot": "chest", "note": "Savage Gladiator Chain" },
+            { "item_id": 22204, "slot": "wrist", "note": "Wristguards of Renown" },
+            { "item_id": 15063, "slot": "hands", "note": "Devilsaur Gauntlets" },
+            { "item_id": 13142, "slot": "waist", "note": "Brigam Girdle" },
+            { "item_id": 15062, "slot": "legs", "note": "Devilsaur Leggings" },
+            { "item_id": 13098, "slot": "ring1", "note": "Painweaver Band" },
+            { "item_id": 17713, "slot": "ring2", "note": "Blackstone Ring" },
+            { "item_id": 13965, "slot": "trinket1", "note": "Blackhand's Breadth" },
+            { "item_id": 11815, "slot": "trinket2", "note": "Hand of Justice" },
+            { "item_id": 12940, "slot": "mainhand", "note": "Dal'Rend's Sacred Charge" },
+            { "item_id": 12939, "slot": "offhand", "note": "Dal'Rend's Tribal Guardian" }
+          ]
+        },
+        "protection": {
+          "gear": [
+            { "item_id": 11746, "slot": "head", "note": "Golem Skull Helm" },
+            { "item_id": 13091, "slot": "neck", "note": "Medallion of Grand Marshal Morris" },
+            { "item_id": 14552, "slot": "shoulder", "note": "Stockade Pauldrons" },
+            { "item_id": 13397, "slot": "back", "note": "Stoneskin Gargoyle Cape" },
+            { "item_id": 14624, "slot": "chest", "note": "Deathbone Chestplate" },
+            { "item_id": 14622, "slot": "hands", "note": "Deathbone Gauntlets" },
+            { "item_id": 14620, "slot": "waist", "note": "Deathbone Girdle" },
+            { "item_id": 14623, "slot": "legs", "note": "Deathbone Legguards" },
+            { "item_id": 11669, "slot": "ring1", "note": "Naglering" },
+            { "item_id": 13098, "slot": "ring2", "note": "Painweaver Band" },
+            { "item_id": 11810, "slot": "trinket1", "note": "Force of Will" },
+            { "item_id": 11811, "slot": "trinket2", "note": "Smoking Heart of the Mountain" },
+            { "item_id": 15806, "slot": "mainhand", "note": "Mirah's Song" },
+            { "item_id": 12602, "slot": "shield", "note": "Draconian Deflector" }
+          ]
+        }
+      }
+    },
+    "paladin": {
+      "class_consumables": [],
+      "specs": {
+        "holy": {
+          "gear": [
+            { "item_id": 13216, "slot": "head", "note": "Crown of the Penitent" },
+            { "item_id": 18723, "slot": "neck", "note": "Animated Chain Necklace" },
+            { "item_id": 18510, "slot": "back", "note": "Hide of the Wild" },
+            { "item_id": 13346, "slot": "chest", "note": "Robes of the Exalted" },
+            { "item_id": 18875, "slot": "legs", "note": "Salamander Scale Pants" },
+            { "item_id": 16058, "slot": "ring1", "note": "Fordring's Seal" },
+            { "item_id": 22334, "slot": "ring2", "note": "Band of Mending" },
+            { "item_id": 11819, "slot": "trinket1", "note": "Second Wind" },
+            { "item_id": 19312, "slot": "offhand", "note": "Lei of the Lifegiver" }
+          ]
+        },
+        "protection": {
+          "gear": [
+            { "item_id": 11746, "slot": "head", "note": "Golem Skull Helm" },
+            { "item_id": 13091, "slot": "neck", "note": "Medallion of Grand Marshal Morris" },
+            { "item_id": 14552, "slot": "shoulder", "note": "Stockade Pauldrons" },
+            { "item_id": 13397, "slot": "back", "note": "Stoneskin Gargoyle Cape" },
+            { "item_id": 14624, "slot": "chest", "note": "Deathbone Chestplate" },
+            { "item_id": 14622, "slot": "hands", "note": "Deathbone Gauntlets" },
+            { "item_id": 14620, "slot": "waist", "note": "Deathbone Girdle" },
+            { "item_id": 14623, "slot": "legs", "note": "Deathbone Legguards" },
+            { "item_id": 11669, "slot": "ring1", "note": "Naglering" },
+            { "item_id": 13098, "slot": "ring2", "note": "Painweaver Band" },
+            { "item_id": 11810, "slot": "trinket1", "note": "Force of Will" },
+            { "item_id": 11811, "slot": "trinket2", "note": "Smoking Heart of the Mountain" },
+            { "item_id": 15806, "slot": "mainhand", "note": "Mirah's Song" },
+            { "item_id": 12602, "slot": "shield", "note": "Draconian Deflector" }
+          ]
+        },
+        "retribution": {
+          "gear": [
+            { "item_id": 12640, "slot": "head", "note": "Lionheart Helm" },
+            { "item_id": 15411, "slot": "neck", "note": "Mark of Fordring" },
+            { "item_id": 12927, "slot": "shoulder", "note": "Truestrike Shoulders" },
+            { "item_id": 13340, "slot": "back", "note": "Cape of the Black Baron" },
+            { "item_id": 11726, "slot": "chest", "note": "Savage Gladiator Chain" },
+            { "item_id": 13142, "slot": "waist", "note": "Brigam Girdle" },
+            { "item_id": 13098, "slot": "ring1", "note": "Painweaver Band" },
+            { "item_id": 17713, "slot": "ring2", "note": "Blackstone Ring" },
+            { "item_id": 13965, "slot": "trinket1", "note": "Blackhand's Breadth" },
+            { "item_id": 11815, "slot": "trinket2", "note": "Hand of Justice" },
+            { "item_id": 12583, "slot": "mainhand", "note": "Blackhand Doomsaw" }
+          ]
+        }
+      }
+    },
+    "hunter": {
+      "class_consumables": [],
+      "specs": {
+        "dps": {
+          "gear": [
+            { "item_id": 18421, "slot": "head", "note": "Backwood Helm" },
+            { "item_id": 19491, "slot": "neck", "note": "Amulet of the Darkmoon" },
+            { "item_id": 12927, "slot": "shoulder", "note": "Truestrike Shoulders" },
+            { "item_id": 13340, "slot": "back", "note": "Cape of the Black Baron" },
+            { "item_id": 11726, "slot": "chest", "note": "Savage Gladiator Chain" },
+            { "item_id": 22204, "slot": "wrist", "note": "Wristguards of Renown" },
+            { "item_id": 15063, "slot": "hands", "note": "Devilsaur Gauntlets" },
+            { "item_id": 15062, "slot": "legs", "note": "Devilsaur Leggings" },
+            { "item_id": 13967, "slot": "feet", "note": "Windreaver Greaves" },
+            { "item_id": 13098, "slot": "ring1", "note": "Painweaver Band" },
+            { "item_id": 17713, "slot": "ring2", "note": "Blackstone Ring" },
+            { "item_id": 13965, "slot": "trinket1", "note": "Blackhand's Breadth" },
+            { "item_id": 12651, "slot": "ranged", "note": "Blackcrow" }
+          ]
+        }
+      }
+    },
+    "rogue": {
+      "class_consumables": [],
+      "specs": {
+        "dps": {
+          "gear": [
+            { "item_id": 13404, "slot": "head", "note": "Mask of the Unforgiven" },
+            { "item_id": 19491, "slot": "neck", "note": "Amulet of the Darkmoon" },
+            { "item_id": 12927, "slot": "shoulder", "note": "Truestrike Shoulders" },
+            { "item_id": 13340, "slot": "back", "note": "Cape of the Black Baron" },
+            { "item_id": 14637, "slot": "chest", "note": "Cadaverous Armor" },
+            { "item_id": 22204, "slot": "wrist", "note": "Wristguards of Renown" },
+            { "item_id": 15063, "slot": "hands", "note": "Devilsaur Gauntlets" },
+            { "item_id": 15062, "slot": "legs", "note": "Devilsaur Leggings" },
+            { "item_id": 13098, "slot": "ring1", "note": "Painweaver Band" },
+            { "item_id": 17713, "slot": "ring2", "note": "Blackstone Ring" },
+            { "item_id": 13965, "slot": "trinket1", "note": "Blackhand's Breadth" },
+            { "item_id": 11815, "slot": "trinket2", "note": "Hand of Justice" },
+            { "item_id": 12590, "slot": "mainhand", "note": "Felstriker" },
+            { "item_id": 18392, "slot": "offhand", "note": "Distracting Dagger" }
+          ]
+        }
+      }
+    },
+    "priest": {
+      "class_consumables": [],
+      "specs": {
+        "healing": {
+          "gear": [
+            { "item_id": 13216, "slot": "head", "note": "Crown of the Penitent" },
+            { "item_id": 18723, "slot": "neck", "note": "Animated Chain Necklace" },
+            { "item_id": 18510, "slot": "back", "note": "Hide of the Wild" },
+            { "item_id": 14154, "slot": "chest", "note": "Truefaith Vestments" },
+            { "item_id": 14632, "slot": "legs", "note": "Necropile Leggings" },
+            { "item_id": 14631, "slot": "feet", "note": "Necropile Boots" },
+            { "item_id": 16058, "slot": "ring1", "note": "Fordring's Seal" },
+            { "item_id": 22334, "slot": "ring2", "note": "Band of Mending" },
+            { "item_id": 11819, "slot": "trinket1", "note": "Second Wind" },
+            { "item_id": 19355, "slot": "mainhand", "note": "Shadow Wing Focus Staff" }
+          ]
+        },
+        "shadow": {
+          "gear": [
+            { "item_id": 18727, "slot": "head", "note": "Crimson Felt Hat" },
+            { "item_id": 18681, "slot": "shoulder", "note": "Burial Shawl" },
+            { "item_id": 14626, "slot": "chest", "note": "Necropile Robe" },
+            { "item_id": 14629, "slot": "wrist", "note": "Necropile Cuffs" },
+            { "item_id": 13170, "slot": "legs", "note": "Skyshroud Leggings" },
+            { "item_id": 14631, "slot": "feet", "note": "Necropile Boots" },
+            { "item_id": 12543, "slot": "ring1", "note": "Songstone of Ironforge" },
+            { "item_id": 12930, "slot": "trinket1", "note": "Briarwood Reed" },
+            { "item_id": 13968, "slot": "trinket2", "note": "Eye of the Beast" },
+            { "item_id": 18534, "slot": "mainhand", "note": "Rod of the Ogre Magi" },
+            { "item_id": 13396, "slot": "ranged", "note": "Skul's Ghastly Touch" }
+          ]
+        }
+      }
+    },
+    "shaman": {
+      "class_consumables": [],
+      "specs": {
+        "healing": {
+          "gear": [
+            { "item_id": 13216, "slot": "head", "note": "Crown of the Penitent" },
+            { "item_id": 18723, "slot": "neck", "note": "Animated Chain Necklace" },
+            { "item_id": 18510, "slot": "back", "note": "Hide of the Wild" },
+            { "item_id": 13346, "slot": "chest", "note": "Robes of the Exalted" },
+            { "item_id": 18875, "slot": "legs", "note": "Salamander Scale Pants" },
+            { "item_id": 16058, "slot": "ring1", "note": "Fordring's Seal" },
+            { "item_id": 22334, "slot": "ring2", "note": "Band of Mending" },
+            { "item_id": 11819, "slot": "trinket1", "note": "Second Wind" },
+            { "item_id": 19312, "slot": "offhand", "note": "Lei of the Lifegiver" }
+          ]
+        },
+        "elemental": {
+          "gear": [
+            { "item_id": 18727, "slot": "head", "note": "Crimson Felt Hat" },
+            { "item_id": 18681, "slot": "shoulder", "note": "Burial Shawl" },
+            { "item_id": 14626, "slot": "chest", "note": "Necropile Robe" },
+            { "item_id": 14629, "slot": "wrist", "note": "Necropile Cuffs" },
+            { "item_id": 13170, "slot": "legs", "note": "Skyshroud Leggings" },
+            { "item_id": 14631, "slot": "feet", "note": "Necropile Boots" },
+            { "item_id": 12543, "slot": "ring1", "note": "Songstone of Ironforge" },
+            { "item_id": 12930, "slot": "trinket1", "note": "Briarwood Reed" },
+            { "item_id": 13968, "slot": "trinket2", "note": "Eye of the Beast" },
+            { "item_id": 18534, "slot": "mainhand", "note": "Rod of the Ogre Magi" }
+          ]
+        },
+        "enhancement": {
+          "gear": [
+            { "item_id": 15411, "slot": "neck", "note": "Mark of Fordring" },
+            { "item_id": 12927, "slot": "shoulder", "note": "Truestrike Shoulders" },
+            { "item_id": 13340, "slot": "back", "note": "Cape of the Black Baron" },
+            { "item_id": 11726, "slot": "chest", "note": "Savage Gladiator Chain" },
+            { "item_id": 15063, "slot": "hands", "note": "Devilsaur Gauntlets" },
+            { "item_id": 15062, "slot": "legs", "note": "Devilsaur Leggings" },
+            { "item_id": 14616, "slot": "feet", "note": "Bloodmail Boots" },
+            { "item_id": 13098, "slot": "ring1", "note": "Painweaver Band" },
+            { "item_id": 17713, "slot": "ring2", "note": "Blackstone Ring" },
+            { "item_id": 13965, "slot": "trinket1", "note": "Blackhand's Breadth" },
+            { "item_id": 11815, "slot": "trinket2", "note": "Hand of Justice" },
+            { "item_id": 19323, "slot": "mainhand", "note": "The Unstoppable Force" }
+          ]
+        }
+      }
+    },
+    "mage": {
+      "class_consumables": [],
+      "specs": {
+        "dps": {
+          "gear": [
+            { "item_id": 18727, "slot": "head", "note": "Crimson Felt Hat" },
+            { "item_id": 18681, "slot": "shoulder", "note": "Burial Shawl" },
+            { "item_id": 14626, "slot": "chest", "note": "Necropile Robe" },
+            { "item_id": 14629, "slot": "wrist", "note": "Necropile Cuffs" },
+            { "item_id": 13170, "slot": "legs", "note": "Skyshroud Leggings" },
+            { "item_id": 14631, "slot": "feet", "note": "Necropile Boots" },
+            { "item_id": 12543, "slot": "ring1", "note": "Songstone of Ironforge" },
+            { "item_id": 12930, "slot": "trinket1", "note": "Briarwood Reed" },
+            { "item_id": 13968, "slot": "trinket2", "note": "Eye of the Beast" },
+            { "item_id": 18534, "slot": "mainhand", "note": "Rod of the Ogre Magi" },
+            { "item_id": 13396, "slot": "ranged", "note": "Skul's Ghastly Touch" }
+          ]
+        }
+      }
+    },
+    "warlock": {
+      "class_consumables": [],
+      "specs": {
+        "dps": {
+          "gear": [
+            { "item_id": 18727, "slot": "head", "note": "Crimson Felt Hat" },
+            { "item_id": 18681, "slot": "shoulder", "note": "Burial Shawl" },
+            { "item_id": 14626, "slot": "chest", "note": "Necropile Robe" },
+            { "item_id": 14629, "slot": "wrist", "note": "Necropile Cuffs" },
+            { "item_id": 13170, "slot": "legs", "note": "Skyshroud Leggings" },
+            { "item_id": 14631, "slot": "feet", "note": "Necropile Boots" },
+            { "item_id": 12543, "slot": "ring1", "note": "Songstone of Ironforge" },
+            { "item_id": 12930, "slot": "trinket1", "note": "Briarwood Reed" },
+            { "item_id": 13968, "slot": "trinket2", "note": "Eye of the Beast" },
+            { "item_id": 18534, "slot": "mainhand", "note": "Rod of the Ogre Magi" },
+            { "item_id": 13396, "slot": "ranged", "note": "Skul's Ghastly Touch" }
+          ]
+        }
+      }
+    },
+    "druid": {
+      "class_consumables": [],
+      "specs": {
+        "healing": {
+          "gear": [
+            { "item_id": 13216, "slot": "head", "note": "Crown of the Penitent" },
+            { "item_id": 18723, "slot": "neck", "note": "Animated Chain Necklace" },
+            { "item_id": 18510, "slot": "back", "note": "Hide of the Wild" },
+            { "item_id": 13346, "slot": "chest", "note": "Robes of the Exalted" },
+            { "item_id": 18875, "slot": "legs", "note": "Salamander Scale Pants" },
+            { "item_id": 16058, "slot": "ring1", "note": "Fordring's Seal" },
+            { "item_id": 22334, "slot": "ring2", "note": "Band of Mending" },
+            { "item_id": 11819, "slot": "trinket1", "note": "Second Wind" },
+            { "item_id": 19355, "slot": "mainhand", "note": "Shadow Wing Focus Staff" }
+          ]
+        },
+        "feral": {
+          "gear": [
+            { "item_id": 13404, "slot": "head", "note": "Mask of the Unforgiven" },
+            { "item_id": 15411, "slot": "neck", "note": "Mark of Fordring" },
+            { "item_id": 12927, "slot": "shoulder", "note": "Truestrike Shoulders" },
+            { "item_id": 13340, "slot": "back", "note": "Cape of the Black Baron" },
+            { "item_id": 14637, "slot": "chest", "note": "Cadaverous Armor" },
+            { "item_id": 22204, "slot": "wrist", "note": "Wristguards of Renown" },
+            { "item_id": 15063, "slot": "hands", "note": "Devilsaur Gauntlets" },
+            { "item_id": 15062, "slot": "legs", "note": "Devilsaur Leggings" },
+            { "item_id": 13098, "slot": "ring1", "note": "Painweaver Band" },
+            { "item_id": 17713, "slot": "ring2", "note": "Blackstone Ring" },
+            { "item_id": 13965, "slot": "trinket1", "note": "Blackhand's Breadth" },
+            { "item_id": 11815, "slot": "trinket2", "note": "Hand of Justice" },
+            { "item_id": 943, "slot": "mainhand", "note": "Warden Staff" }
+          ]
+        },
+        "balance": {
+          "gear": [
+            { "item_id": 18727, "slot": "head", "note": "Crimson Felt Hat" },
+            { "item_id": 18681, "slot": "shoulder", "note": "Burial Shawl" },
+            { "item_id": 14626, "slot": "chest", "note": "Necropile Robe" },
+            { "item_id": 14629, "slot": "wrist", "note": "Necropile Cuffs" },
+            { "item_id": 13170, "slot": "legs", "note": "Skyshroud Leggings" },
+            { "item_id": 14631, "slot": "feet", "note": "Necropile Boots" },
+            { "item_id": 12543, "slot": "ring1", "note": "Songstone of Ironforge" },
+            { "item_id": 12930, "slot": "trinket1", "note": "Briarwood Reed" },
+            { "item_id": 13968, "slot": "trinket2", "note": "Eye of the Beast" },
+            { "item_id": 18534, "slot": "mainhand", "note": "Rod of the Ogre Magi" }
+          ]
+        }
+      }
+    }
+  }
+}

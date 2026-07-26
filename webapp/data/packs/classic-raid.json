@@ -1,0 +1,32 @@
+{
+  "slug": "classic-raid",
+  "name": "Classic Raid Consumables (60)",
+  "level_cap": 60,
+  "min_level": 55,
+  "consumables": [
+    { "item_id": 12820, "count": 10, "note": "Winterfall Firewater" },
+    { "item_id": 12451, "count": 10, "note": "Juju Power" },
+    { "item_id": 12460, "count": 10, "note": "Juju Might" },
+    { "item_id": 13452, "count": 10, "note": "Elixir of the Mongoose" },
+    { "item_id": 13454, "count": 10, "note": "Greater Arcane Elixir" },
+    { "item_id": 9264, "count": 10, "note": "Elixir of Shadow Power" },
+    { "item_id": 3825, "count": 20, "note": "Elixir of Fortitude" },
+    { "item_id": 13445, "count": 20, "note": "Elixir of Superior Defense" },
+    { "item_id": 20749, "count": 1, "note": "Brilliant Wizard Oil (5 charges)" },
+    { "item_id": 20749, "count": 1, "note": "Brilliant Wizard Oil (5 charges)" },
+    { "item_id": 20748, "count": 1, "note": "Brilliant Mana Oil (5 charges)" },
+    { "item_id": 20748, "count": 1, "note": "Brilliant Mana Oil (5 charges)" },
+    { "item_id": 12404, "count": 20, "note": "Dense Sharpening Stone" },
+    { "item_id": 18262, "count": 10, "note": "Elemental Sharpening Stone" },
+    { "item_id": 5634, "count": 10, "note": "Free Action Potion" },
+    { "item_id": 13457, "count": 10, "note": "Greater Fire Protection Potion" },
+    { "item_id": 13459, "count": 10, "note": "Greater Shadow Protection Potion" },
+    { "item_id": 13458, "count": 10, "note": "Greater Nature Protection Potion" },
+    { "item_id": 13446, "count": 20, "note": "Major Healing Potion" },
+    { "item_id": 13444, "count": 20, "note": "Major Mana Potion" },
+    { "item_id": 13928, "count": 20, "note": "Grilled Squid" },
+    { "item_id": 13931, "count": 20, "note": "Nightfin Soup" },
+    { "item_id": 18254, "count": 20, "note": "Runn Tum Tuber Surprise" }
+  ],
+  "classes": {}
+}
