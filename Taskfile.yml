@@ -1,0 +1,209 @@
+# SummonStack task runner — https://taskfile.dev
+#
+#   task              list every task
+#   task up           start the stack
+#   task doctor       check for the problems that actually bite this stack
+#
+# Install Task: https://taskfile.dev/installation/
+version: "3"
+
+vars:
+  # Falls back to the compose default, which is what MySQL was initialised
+  # with when no .env existed.
+  DB_PASS:
+    sh: |
+      pw=$(grep -E '^DOCKER_DB_ROOT_PASSWORD=' .env 2>/dev/null | cut -d= -f2- || true)
+      echo "${pw:-password}"
+  ACORE_DBS: acore_auth acore_world acore_characters
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  # ── Lifecycle ────────────────────────────────────────────────────────────
+  up:
+    desc: Start the whole stack
+    cmds:
+      - docker compose up -d
+      - task: ps
+
+  down:
+    desc: Stop the stack (keeps all data)
+    cmds:
+      - docker compose down
+
+  restart:
+    desc: "Restart services, e.g. task restart -- ac-webapp"
+    cmds:
+      - docker compose restart {{.CLI_ARGS}}
+
+  ps:
+    desc: Show container status
+    cmds:
+      - docker compose ps -a
+
+  logs:
+    desc: "Follow logs, e.g. task logs -- ac-worldserver"
+    cmds:
+      - docker compose logs -f --tail 100 {{.CLI_ARGS}}
+
+  pull:
+    desc: Refresh all images (guards against stale cached :master tags)
+    cmds:
+      - docker compose pull
+
+  build:
+    desc: Rebuild the webapp image and restart it
+    cmds:
+      - docker compose build ac-webapp
+      - docker compose up -d --no-deps ac-webapp
+
+  # ── Accounts ─────────────────────────────────────────────────────────────
+  admin:
+    desc: "Create/promote a GM3 admin: task admin USER=myadmin PASS=MySecretPass1"
+    requires:
+      vars: [USER, PASS]
+    cmds:
+      - docker compose exec ac-webapp node scripts/create-admin.mjs {{.USER}} {{.PASS}}
+
+  # ── Database ─────────────────────────────────────────────────────────────
+  db:
+    desc: "MySQL shell, e.g. task db -- acore_world (default: acore_auth)"
+    cmds:
+      - docker compose exec ac-database mysql -uroot -p{{.DB_PASS}} {{.CLI_ARGS | default "acore_auth"}}
+
+  db:import:
+    desc: Re-run the schema importer and report failures loudly
+    cmds:
+      - docker compose up -d --force-recreate --no-deps ac-db-import
+      - |
+        echo "Waiting for the import to finish…"
+        code=$(docker wait ac-db-import)
+        if [ "$code" != "0" ]; then
+          echo "" >&2
+          echo "Import FAILED (exit $code). Last 40 log lines:" >&2
+          docker logs --tail 40 ac-db-import >&2
+          exit 1
+        fi
+        echo "Import complete."
+
+  world:
+    desc: Attach to the worldserver console (detach with Ctrl-P Ctrl-Q)
+    cmds:
+      - docker attach ac-worldserver
+
+  # ── Downloads ────────────────────────────────────────────────────────────
+  client:check:
+    desc: Verify the download server without transferring gigabytes
+    silent: true
+    cmds:
+      - |
+        base="$(grep -E '^DOWNLOAD_URL=' .env 2>/dev/null | cut -d= -f2- || true)"
+        base="${base:-http://localhost:8081}"
+        echo "Download server: $base"
+        printf '  healthz             -> %s (expect 200)\n' \
+          "$(curl -s -o /dev/null -w '%{http_code}' "$base/healthz")"
+        # Anonymous, so this only ever sees the redirect — never the file.
+        printf '  client.zip (anon)   -> %s (expect 302, login required)\n' \
+          "$(curl -s -o /dev/null -w '%{http_code}' "$base/files/client.zip")"
+        printf '  test fixture (anon) -> %s (expect 302)\n' \
+          "$(curl -s -o /dev/null -w '%{http_code}' "$base/files/test.txt")"
+        # Read the size off the mount instead of over HTTP: an authenticated
+        # GET would stream the whole ~18 GB file just to read one header.
+        size=$(docker compose exec -T ac-downloads stat -c %s /srv/client.zip 2>/dev/null | tr -d '\r')
+        if [ -n "$size" ] && [ "$size" -gt 0 ] 2>/dev/null; then
+          printf '  client.zip mounted  -> %s bytes (%s GB)\n' \
+            "$size" "$(awk -v b="$size" 'BEGIN{printf "%.1f", b/1000000000}')"
+        else
+          echo "  client.zip mounted  -> MISSING (check CLIENT_ZIP_PATH in .env)"
+        fi
+
+  # ── Diagnostics ──────────────────────────────────────────────────────────
+  doctor:
+    desc: Check for stale images, missing .env, and container name clashes
+    silent: true
+    cmds:
+      - |
+        echo "── .env ──"
+        if [ -f .env ]; then
+          echo "  present"
+          if grep -q '^SESSION_SECRET=please-change-me' .env 2>/dev/null; then
+            echo "  WARNING: SESSION_SECRET is still the default — sessions are forgeable."
+          fi
+        else
+          echo "  MISSING — the stack is running on compose defaults, including"
+          echo "  the published default SESSION_SECRET. Run: task setup"
+        fi
+
+        echo "── image ages ──"
+        for img in acore/ac-wotlk-db-import:master \
+                   acore/ac-wotlk-worldserver:master \
+                   acore/ac-wotlk-authserver:master \
+                   acore/ac-wotlk-client-data:master; do
+          created=$(docker inspect "$img" --format '{{"{{"}}.Created{{"}}"}}' 2>/dev/null | cut -dT -f1)
+          printf '  %-40s %s\n' "$img" "${created:-not pulled}"
+        done
+        echo "  Mismatched dates cause schema errors (e.g. a worldserver that"
+        echo "  expects rbac_* tables an older importer never created)."
+        echo "  Fix with: task pull && task db:import"
+
+        echo "── container name clashes ──"
+        clash=$(docker ps -a --filter "name=^/ac-" \
+          --format '{{"{{"}}.Names{{"}}"}} {{"{{"}}.Label "com.docker.compose.project"{{"}}"}}' \
+          | awk '$2 != "summonstack" && $2 != "" {print "  " $1 " belongs to project: " $2}')
+        if [ -n "$clash" ]; then
+          echo "$clash"
+          echo "  container_name is global, so these block this stack from starting."
+        else
+          echo "  none"
+        fi
+
+  setup:
+    desc: Create .env with a random session secret (safe to re-run)
+    status:
+      - test -f .env
+    cmds:
+      - cp .env.example .env
+      # The DB password must match what MySQL was initialised with; an env var
+      # cannot change an existing datadir's root password.
+      - |
+        existing_pw="password"
+        sed -i "s|^DOCKER_DB_ROOT_PASSWORD=.*|DOCKER_DB_ROOT_PASSWORD=${existing_pw}|" .env
+        secret=$(openssl rand -base64 48 | tr -d '\n')
+        sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=${secret}|" .env
+        echo "Wrote .env with a random SESSION_SECRET."
+        echo "DOCKER_DB_ROOT_PASSWORD left as '${existing_pw}' to match the existing"
+        echo "MySQL volume — changing it needs an ALTER USER, not just this file."
+
+  # ── Reset ────────────────────────────────────────────────────────────────
+  reset:
+    desc: "Rebuild all game databases from scratch (keeps the 3 GB client data)"
+    prompt: Drop acore_auth, acore_world and acore_characters and re-import them? All accounts and characters are lost.
+    cmds:
+      - docker compose stop ac-worldserver ac-authserver ac-webapp
+      - |
+        for db in {{.ACORE_DBS}}; do
+          echo "Dropping $db…"
+          docker compose exec -T ac-database \
+            mysql -uroot -p{{.DB_PASS}} -e "DROP DATABASE IF EXISTS \`$db\`;"
+        done
+      - task: db:import
+      - docker compose up -d
+      - |
+        echo ""
+        echo "Databases rebuilt. Recreate your admin account with:"
+        echo "  task admin USER=myadmin PASS=MySecretPass1"
+
+  reset:hard:
+    desc: "Delete EVERYTHING including the DB and the 3 GB client data"
+    prompt: Remove all containers AND volumes? The client data must then be re-downloaded (~3 GB).
+    cmds:
+      - docker compose down -v --remove-orphans
+      - |
+        echo ""
+        echo "All volumes removed. Next: task up"
+        echo "First boot re-downloads client data and re-initialises MySQL,"
+        echo "which takes roughly 10-15 minutes before the portal responds."
