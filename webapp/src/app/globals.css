@@ -251,6 +251,17 @@ table.data th {
   color: var(--bad);
 }
 
+/* Copy-me command blocks in the admin instructions. */
+.snippet {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0.8rem 1rem;
+  margin: 0.75rem 0;
+  overflow-x: auto;
+  white-space: pre;
+}
+
 .pill {
   display: inline-block;
   border-radius: 999px;
