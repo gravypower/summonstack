@@ -63,11 +63,113 @@ tasks:
 
   # ── Accounts ─────────────────────────────────────────────────────────────
   admin:
-    desc: "Create/promote a GM3 admin: task admin USER=myadmin PASS=MySecretPass1"
+    desc: "Create/promote a GM3 admin (wires the console on first setup; SOAP=1 repoints it)"
     requires:
       vars: [USER, PASS]
+    silent: true
     cmds:
       - docker compose exec ac-webapp node scripts/create-admin.mjs {{.USER}} {{.PASS}}
+      - |
+        # Wire the admin console automatically the first time, since a fresh
+        # install always wants it. SOAP=1 is only needed to repoint a console
+        # that is already configured, so creating a second admin cannot
+        # silently steal the console from the first.
+        cur_user=$(grep -E '^SOAP_USER=' .env 2>/dev/null | cut -d= -f2- || true)
+        cur_pass=$(grep -E '^SOAP_PASS=' .env 2>/dev/null | cut -d= -f2- || true)
+        if [ ! -f .env ]; then
+          echo ""
+          echo "No .env yet, so the admin console was not wired. Run:"
+          echo "  task setup && task soap USER={{.USER}} PASS=<the password>"
+        elif [ -n "{{.SOAP}}" ] || [ -z "$cur_pass" ]; then
+          echo ""
+          task soap USER='{{.USER}}' PASS='{{.PASS}}'
+        else
+          echo ""
+          echo "Admin console is already wired to '${cur_user}' — left alone."
+          echo "To repoint it at {{.USER}}, re-run with SOAP=1."
+        fi
+
+  soap:
+    desc: "Point the admin console at an account: task soap USER=myadmin PASS=pw"
+    requires:
+      vars: [USER, PASS]
+    silent: true
+    cmds:
+      - |
+        test -f .env || { echo "No .env found. Run: task setup" >&2; exit 1; }
+        # Values go through the environment rather than sed/awk -v so that
+        # passwords containing &, |, \ or / cannot corrupt the file.
+        set_env() {
+          SS_KEY="$1" SS_VAL="$2" awk '
+            BEGIN { k = ENVIRON["SS_KEY"]; v = ENVIRON["SS_VAL"]; done = 0 }
+            index($0, k "=") == 1 { print k "=" v; done = 1; next }
+            { print }
+            END { if (!done) print k "=" v }
+          ' .env > .env.tmp && mv .env.tmp .env
+        }
+        set_env SOAP_USER '{{.USER}}'
+        set_env SOAP_PASS '{{.PASS}}'
+        chmod 600 .env
+        echo "Wrote SOAP_USER/SOAP_PASS to .env (mode 600)."
+      - docker compose up -d --no-deps ac-webapp
+      - task: soap:check
+
+  soap:check:
+    desc: Verify the admin console credentials against the worldserver
+    silent: true
+    cmds:
+      - |
+        user=$(grep -E '^SOAP_USER=' .env 2>/dev/null | cut -d= -f2- || true)
+        pass=$(grep -E '^SOAP_PASS=' .env 2>/dev/null | cut -d= -f2- || true)
+        port=$(grep -E '^DOCKER_SOAP_EXTERNAL_PORT=' .env 2>/dev/null | cut -d= -f2- || true)
+        port="${port:-7878}"
+        if [ -z "$user" ] || [ -z "$pass" ]; then
+          echo "SOAP_USER/SOAP_PASS not set in .env. Run: task soap USER=x PASS=y" >&2
+          exit 1
+        fi
+        body='<?xml version="1.0" encoding="utf-8"?>
+        <SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="urn:AC">
+          <SOAP-ENV:Body><ns1:executeCommand><command>server info</command></ns1:executeCommand></SOAP-ENV:Body>
+        </SOAP-ENV:Envelope>'
+        # gSOAP returns its 401 in the HTTP status only — the body is a SOAP
+        # Fault mentioning neither "401" nor "Unauthorized" — so the status
+        # code has to be captured separately or auth failures look like the
+        # worldserver being down.
+        # `|| true` because a refused connection exits 7, which would abort
+        # the task under errexit before the diagnostics below can run. curl
+        # still emits the write-out (as 000) in that case.
+        raw=$(curl -s -m 10 -u "$user:$pass" -H 'Content-Type: text/xml' \
+               -d "$body" -w '__HTTP__%{http_code}' "http://127.0.0.1:${port}/" 2>/dev/null || true)
+        code=${raw##*__HTTP__}
+        out=${raw%__HTTP__*}
+        case "$code" in
+          000|"")
+            echo "Could not reach the worldserver SOAP API on 127.0.0.1:${port}." >&2
+            echo "Is ac-worldserver up? Check with: task ps" >&2
+            exit 1
+            ;;
+          401|403)
+            echo "SOAP auth REJECTED for '$user' (HTTP $code)." >&2
+            echo "Check the password, and that the account has GM level 3:" >&2
+            echo "  task admin USER=$user PASS=<pw>" >&2
+            exit 1
+            ;;
+        esac
+        case "$out" in
+          *"<result>"*)
+            echo "SOAP OK as '$user'. Worldserver replied:"
+            # Range-match so the XML declaration outside <result> is dropped.
+            printf '%s\n' "$out" \
+              | sed -n '/<result>/,/<\/result>/p' \
+              | sed -e 's|.*<result>||' -e 's|</result>.*||' -e 's/&#xD;//g' \
+              | sed -e '/^[[:space:]]*$/d' -e 's/^/  /' | head -6
+            ;;
+          *)
+            echo "No usable reply from the worldserver SOAP API on port $port (HTTP ${code:-none})." >&2
+            echo "Is ac-worldserver running? Check: task logs -- ac-worldserver" >&2
+            exit 1
+            ;;
+        esac
 
   # ── Database ─────────────────────────────────────────────────────────────
   db:

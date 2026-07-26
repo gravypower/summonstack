@@ -102,9 +102,12 @@ await conn.query(
 );
 console.log(`GM level 3 granted on all realms.`);
 console.log(``);
-console.log(`Next steps:`);
+console.log(`To use this account for the live admin console, either run:`);
+console.log(`  task soap USER=${username} PASS=<the password>`);
+console.log(`or do it by hand:`);
 console.log(`  1. Set SOAP_USER=${username} and SOAP_PASS=<the password> in .env`);
 console.log(`  2. Run: docker compose up -d ac-webapp   (to reload the webapp env)`);
-console.log(`  3. Log in at the website and open /admin`);
+console.log(``);
+console.log(`Then log in at the website and open /admin.`);
 
 await conn.end();
