@@ -20,6 +20,10 @@ export async function GET(): Promise<Response> {
           description: p.description,
           price: p.price,
           deliveryType: p.delivery_type,
+          boostLevel:
+            p.delivery_type === "level_boost"
+              ? Number(payload.level) || null
+              : null,
           pack,
           minLevel: pack ? packInfo[pack]?.minLevel ?? null : null,
           specsByClass: pack ? packInfo[pack]?.specsByClass ?? {} : null,

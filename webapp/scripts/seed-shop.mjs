@@ -96,17 +96,37 @@ const DDL = [
      spec VARCHAR(24) NULL,
      item_id INT UNSIGNED NOT NULL,
      count SMALLINT UNSIGNED NOT NULL DEFAULT 1,
-     category ENUM('gear','consumable') NOT NULL,
+     category ENUM('gear','consumable','bag') NOT NULL,
      slot_hint VARCHAR(16) NULL,
      PRIMARY KEY (id),
      KEY idx_lookup (pack_id, class_id, spec),
      CONSTRAINT fk_pack_items_pack FOREIGN KEY (pack_id)
        REFERENCES \`${WEB_DB}\`.shop_packs (id) ON DELETE CASCADE
    ) ENGINE=InnoDB`,
+  // 'bag' was added after the first installs; CREATE TABLE IF NOT EXISTS above
+  // won't widen an existing enum, and re-running a MODIFY is harmless.
+  `ALTER TABLE \`${WEB_DB}\`.shop_pack_items
+     MODIFY category ENUM('gear','consumable','bag') NOT NULL`,
 ];
 
 // Prices are starting points — tune them in shop_products, they survive reseeds.
 const PRODUCTS = [
+  {
+    slug: "level-boost-60",
+    name: "Level 60 Boost",
+    description: "Instantly boost a character to level 60, the Classic cap.",
+    price: 200,
+    delivery_type: "level_boost",
+    payload: { level: 60 },
+  },
+  {
+    slug: "level-boost-70",
+    name: "Level 70 Boost",
+    description: "Instantly boost a character to level 70, the TBC cap.",
+    price: 350,
+    delivery_type: "level_boost",
+    payload: { level: 70 },
+  },
   {
     slug: "level-boost-80",
     name: "Level 80 Boost",
@@ -127,7 +147,7 @@ const PRODUCTS = [
   {
     slug: "pack-classic",
     name: "Classic Starter Pack (60)",
-    description: "Level 60 pre-raid gear for your class/spec plus vanilla consumables, by mail.",
+    description: "Level 60 pre-raid gear for your class/spec, four 18-slot bags and vanilla consumables, by mail.",
     price: 400,
     delivery_type: "item_pack",
     payload: { pack: "classic" },
@@ -144,7 +164,7 @@ const PRODUCTS = [
   {
     slug: "pack-tbc",
     name: "TBC Starter Pack (70)",
-    description: "Level 70 pre-raid gear for your class/spec plus Outland consumables, by mail.",
+    description: "Level 70 pre-raid gear for your class/spec, four 22-slot bags and Outland consumables, by mail.",
     price: 700,
     delivery_type: "item_pack",
     payload: { pack: "tbc" },
@@ -161,7 +181,7 @@ const PRODUCTS = [
   {
     slug: "pack-wotlk",
     name: "WotLK Starter Pack (80)",
-    description: "Level 80 pre-raid gear for your class/spec plus Northrend consumables, by mail.",
+    description: "Level 80 pre-raid gear for your class/spec, four 22-slot bags and Northrend consumables, by mail.",
     price: 1000,
     delivery_type: "item_pack",
     payload: { pack: "wotlk" },
@@ -183,6 +203,13 @@ function loadPackFiles() {
     const pack = JSON.parse(readFileSync(join(PACKS_DIR, file), "utf8"));
     // Flatten the three scopes into shop_pack_items rows.
     const rows = [];
+    // Bags are non-stackable, so one row per bag: mails are chunked by row and
+    // the core counts each bag against MAX_MAIL_ITEMS separately.
+    for (const b of pack.bags ?? []) {
+      for (let i = 0; i < (b.count ?? 1); i++) {
+        rows.push({ class_id: null, spec: null, item_id: b.item_id, count: 1, category: "bag", slot_hint: "bag" });
+      }
+    }
     for (const c of pack.consumables ?? []) {
       rows.push({ class_id: null, spec: null, item_id: c.item_id, count: c.count ?? 1, category: "consumable", slot_hint: null });
     }
@@ -283,8 +310,9 @@ for (const p of packs) {
     );
   }
   const gear = p.rows.filter((r) => r.category === "gear").length;
+  const bags = p.rows.filter((r) => r.category === "bag").length;
   console.log(
-    `Pack '${p.meta.slug}': ${p.rows.length} items (${gear} gear, ${p.rows.length - gear} consumable rows).`
+    `Pack '${p.meta.slug}': ${p.rows.length} items (${gear} gear, ${bags} bags, ${p.rows.length - gear - bags} consumable rows).`
   );
 }
 
