@@ -153,16 +153,24 @@ once; registration without a link is impossible.
 
 ## Letting other people connect
 
-Out of the box the realm address is `127.0.0.1` — only you can play. To let
-others connect, point the realm at your LAN IP or public hostname:
+Out of the box the realm address is `127.0.0.1` — only you can play. The admin
+panel's **Realm** tab (`/admin/realm`) shows the current address, flags it while
+it is still local-only, and spells out the steps below. To let others connect,
+point the realm at your LAN IP or public hostname:
 
 ```bash
 docker compose exec ac-database mysql -uroot -p"$(grep ^DOCKER_DB_ROOT_PASSWORD .env | cut -d= -f2)" -e "UPDATE acore_auth.realmlist SET address='YOUR.LAN.OR.PUBLIC.IP' WHERE id=1;"
 ```
 
-Also update `SITE_URL` and `DOWNLOAD_URL` in `.env` so invite links and the
-client download use the right hostname, and forward/allow TCP **3724**
+Also set `PUBLIC_HOST` in `.env` to the hostname players type in the browser
+(a domain or a LAN/public IP) and restart with `docker compose up -d` — invite
+links and the client-download button are built from it, so while it is
+`localhost` they only work on this machine. Forward/allow TCP **3724**
 (login), **8085** (world), **8080** (website), and **8081** (downloads).
+
+Behind a reverse proxy, or on non-default ports, set `SITE_URL` and
+`DOWNLOAD_URL` explicitly instead; either one overrides the `PUBLIC_HOST`
+default.
 
 Players need a 3.3.5a client with `Data/<locale>/realmlist.wtf` set to
 `set realmlist YOUR.LAN.OR.PUBLIC.IP` — the homepage shows the exact line.
@@ -183,7 +191,8 @@ Access requires a portal login: nginx calls `/api/download/authorize` on the
 webapp via `auth_request` and redirects anyone without a session to
 `SITE_URL/login`. `DOWNLOAD_URL` must therefore share a hostname with
 `SITE_URL`, otherwise the login cookie is not sent with the download request.
-(Ports do not matter — cookies are not port-scoped.)
+(Ports do not matter — cookies are not port-scoped.) Leaving both unset and
+setting only `PUBLIC_HOST` keeps them in step automatically.
 
 Anything else dropped in `downloads/files/` is published at `/files/<name>`
 under the same login requirement — handy for patches or addon packs.

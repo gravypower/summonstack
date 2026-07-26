@@ -227,8 +227,14 @@ tasks:
     silent: true
     cmds:
       - |
+        # Mirrors the compose default: an explicit DOWNLOAD_URL wins, else
+        # PUBLIC_HOST on the published download port.
         base="$(grep -E '^DOWNLOAD_URL=' .env 2>/dev/null | cut -d= -f2- || true)"
-        base="${base:-http://localhost:8081}"
+        if [ -z "$base" ]; then
+          host="$(grep -E '^PUBLIC_HOST=' .env 2>/dev/null | cut -d= -f2- || true)"
+          port="$(grep -E '^DOCKER_DOWNLOAD_EXTERNAL_PORT=' .env 2>/dev/null | cut -d= -f2- || true)"
+          base="http://${host:-localhost}:${port:-8081}"
+        fi
         echo "Download server: $base"
         printf '  healthz             -> %s (expect 200)\n' \
           "$(curl -s -o /dev/null -w '%{http_code}' "$base/healthz")"

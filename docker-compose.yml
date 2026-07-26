@@ -123,8 +123,12 @@ services:
       SOAP_USER: ${SOAP_USER:-admin}
       SOAP_PASS: ${SOAP_PASS:-}
       SESSION_SECRET: ${SESSION_SECRET:-please-change-me}
-      SITE_URL: ${SITE_URL:-http://localhost:8080}
-      DOWNLOAD_URL: ${DOWNLOAD_URL:-http://localhost:8081}
+      # Both default to PUBLIC_HOST on their published ports, so the usual
+      # case (plain HTTP, no reverse proxy) needs one hostname in .env rather
+      # than two URLs kept in sync. Set either explicitly to override — needed
+      # behind a proxy that terminates HTTPS or drops the port.
+      SITE_URL: ${SITE_URL:-http://${PUBLIC_HOST:-localhost}:${DOCKER_WEB_EXTERNAL_PORT:-8080}}
+      DOWNLOAD_URL: ${DOWNLOAD_URL:-http://${PUBLIC_HOST:-localhost}:${DOCKER_DOWNLOAD_EXTERNAL_PORT:-8081}}
       AUTH_HOST: ac-authserver
       AUTH_PORT: "3724"
       WORLD_HOST: ac-worldserver
@@ -144,7 +148,8 @@ services:
       - ac-network
     restart: unless-stopped
     environment:
-      SITE_URL: ${SITE_URL:-http://localhost:8080}
+      # Only used to build the login redirect; same default as ac-webapp.
+      SITE_URL: ${SITE_URL:-http://${PUBLIC_HOST:-localhost}:${DOCKER_WEB_EXTERNAL_PORT:-8080}}
       PORTAL_INTERNAL_URL: http://ac-webapp:3000
       # Filename the browser saves the client as; the URL stays /files/client.zip.
       CLIENT_ZIP_NAME: ${CLIENT_ZIP_NAME:-ChromieCraft_3.3.5a.zip}
