@@ -18,6 +18,7 @@ interface Product {
   description: string | null;
   price: number;
   deliveryType: "level_boost" | "profession_boost" | "item_pack";
+  boostLevel: number | null;
   pack: string | null;
   minLevel: number | null;
   specsByClass: Record<number, string[]> | null;
@@ -49,6 +50,21 @@ const STATUS_PILL: Record<string, string> = {
 function specLabel(spec: string): string {
   if (spec === "dps") return "DPS";
   return spec.charAt(0).toUpperCase() + spec.slice(1);
+}
+
+// crypto.randomUUID only exists in secure contexts, and the portal is usually
+// reached over plain HTTP on a LAN address. getRandomValues has no such
+// restriction, so build the v4 UUID by hand when randomUUID is missing.
+function newIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const hex = Array.from(b, (n) => n.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 export default function ShopPage() {
@@ -95,7 +111,7 @@ export default function ShopPage() {
     setMsg(null);
     // Minted when the panel opens: double-clicking Buy replays the same
     // purchase instead of making a second one.
-    setIdemKey(crypto.randomUUID());
+    setIdemKey(newIdempotencyKey());
   }
 
   const product = products.find((p) => p.slug === active) ?? null;
@@ -107,7 +123,9 @@ export default function ShopPage() {
   const needsSpec = specOptions.length > 0;
 
   function eligible(p: Product, c: Character): boolean {
-    if (p.deliveryType === "level_boost") return c.level < 80;
+    // A boost only moves a character up, so anyone already at or past the
+    // target level is out — the server rejects those with a 409 anyway.
+    if (p.deliveryType === "level_boost") return c.level < (p.boostLevel ?? 80);
     if (p.minLevel != null) return c.level >= p.minLevel;
     return true;
   }
@@ -155,7 +173,7 @@ export default function ShopPage() {
         text: `Order #${t.id} is ${t.status} — if it doesn't resolve shortly, contact an admin.`,
       });
     }
-    setIdemKey(crypto.randomUUID());
+    setIdemKey(newIdempotencyKey());
     refresh();
   }
 
@@ -212,7 +230,7 @@ export default function ShopPage() {
                         {c.name} — {CLASS_NAMES[c.class] ?? "?"} {c.level}
                         {!eligible(p, c)
                           ? p.deliveryType === "level_boost"
-                            ? " (already 80)"
+                            ? ` (already ${c.level})`
                             : ` (needs level ${p.minLevel})`
                           : c.online
                             ? " (online)"

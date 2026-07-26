@@ -3,6 +3,9 @@
   "name": "Classic Starter Pack (60)",
   "level_cap": 60,
   "min_level": 60,
+  "bags": [
+    { "item_id": 14156, "count": 4, "note": "Bottomless Bag — 18 slots, the largest bag in vanilla" }
+  ],
   "consumables": [
     { "item_id": 13452, "count": 10, "note": "Elixir of the Mongoose" },
     { "item_id": 13510, "count": 5, "note": "Flask of the Titans" },

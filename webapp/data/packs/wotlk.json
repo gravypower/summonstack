@@ -3,6 +3,9 @@
   "name": "WotLK Starter Pack (80)",
   "level_cap": 80,
   "min_level": 80,
+  "bags": [
+    { "item_id": 41600, "count": 4, "note": "Glacial Bag — 22 slots, the largest craftable bag in WotLK" }
+  ],
   "consumables": [
     { "item_id": 46377, "count": 5, "note": "Flask of Endless Rage" },
     { "item_id": 46379, "count": 5, "note": "Flask of Stoneblood" },

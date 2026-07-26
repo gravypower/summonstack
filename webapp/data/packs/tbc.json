@@ -3,6 +3,9 @@
   "name": "TBC Starter Pack (70)",
   "level_cap": 70,
   "min_level": 70,
+  "bags": [
+    { "item_id": 38082, "count": 4, "note": "\"Gigantique\" Bag — 22 slots, the largest bag in TBC" }
+  ],
   "consumables": [
     { "item_id": 22838, "count": 20, "note": "Haste Potion" },
     { "item_id": 22854, "count": 5, "note": "Flask of Relentless Assault" },

@@ -103,7 +103,7 @@ const SHOP_DDL = [
      spec VARCHAR(24) NULL,
      item_id INT UNSIGNED NOT NULL,
      count SMALLINT UNSIGNED NOT NULL DEFAULT 1,
-     category ENUM('gear','consumable') NOT NULL,
+     category ENUM('gear','consumable','bag') NOT NULL,
      slot_hint VARCHAR(16) NULL,
      PRIMARY KEY (id),
      KEY idx_lookup (pack_id, class_id, spec),
