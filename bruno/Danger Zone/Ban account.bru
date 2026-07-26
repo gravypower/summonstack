@@ -1,0 +1,30 @@
+meta {
+  name: Ban account
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/admin/accounts/actions
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "accountId": {{targetAccountId}},
+    "action": "ban",
+    "reason": "Banned from the Bruno collection",
+    "days": 1
+  }
+}
+
+docs {
+  Omit `days`, or send 0, for a **permanent** ban — AzerothCore encodes that as
+  `unbandate == bandate`. Capped at 3650 days.
+
+  The server refuses to ban the account you are logged in as, but nothing stops
+  one admin banning another: a banned admin can still drive the SOAP console
+  (SOAP does not check bans) yet can no longer log into the portal, which fails
+  as a 403 on login rather than a 401.
+}

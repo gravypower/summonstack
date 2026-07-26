@@ -1,0 +1,43 @@
+meta {
+  name: Shop catalog
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/shop/products
+  body: none
+  auth: none
+}
+
+tests {
+  test("returns the catalog", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().products).to.be.an("array").that.is.not.empty;
+  });
+
+  test("every product has a price and delivery type", function () {
+    res.getBody().products.forEach(function (p) {
+      expect(p.price, p.slug).to.be.a("number");
+      expect(
+        ["level_boost", "profession_boost", "item_pack"],
+        p.slug
+      ).to.include(p.deliveryType);
+    });
+  });
+
+  test("item packs expose their spec lists", function () {
+    const packs = res.getBody().products.filter(function (p) {
+      return p.deliveryType === "item_pack";
+    });
+    expect(packs).to.not.be.empty;
+    packs.forEach(function (p) {
+      expect(p.specsByClass, p.slug).to.be.an("object");
+    });
+  });
+}
+
+docs {
+  Seeded by `task shop:seed`. An empty list means the seed has not been run
+  against this database yet.
+}

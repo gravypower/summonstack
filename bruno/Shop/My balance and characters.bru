@@ -1,0 +1,32 @@
+meta {
+  name: My balance and characters
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/shop/me
+  body: none
+  auth: none
+}
+
+script:post-response {
+  // Publish the first character so Purchase works without pasting a guid.
+  const chars = res.getBody().characters || [];
+  if (chars.length > 0) {
+    bru.setVar("characterGuid", chars[0].guid);
+  }
+}
+
+tests {
+  test("returns balance and characters", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().balance).to.be.a("number");
+    expect(res.getBody().characters).to.be.an("array");
+  });
+}
+
+docs {
+  `online` is surfaced per character because profession boosts are applied by
+  direct SQL and are refused while the character is logged in.
+}

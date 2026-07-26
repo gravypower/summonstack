@@ -1,0 +1,22 @@
+meta {
+  name: Server status
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/status
+  body: none
+  auth: none
+}
+
+tests {
+  test("responds without a session", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}
+
+docs {
+  Powers the online/offline badges on the homepage: reachability of the auth
+  server and worldserver, plus the online player count.
+}

@@ -1,0 +1,27 @@
+meta {
+  name: Set GM level
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/admin/accounts/actions
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "accountId": {{targetAccountId}},
+    "action": "gmlevel",
+    "level": 3
+  }
+}
+
+docs {
+  Levels 0–3, applied to all realms. Level 0 deletes the `account_access` row.
+  Level 3 is what the admin panel and the shop's SOAP account require.
+
+  The server refuses to lower your own level below 3, so you cannot lock
+  yourself out of the admin panel with this.
+}

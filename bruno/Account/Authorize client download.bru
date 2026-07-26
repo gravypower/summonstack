@@ -1,0 +1,23 @@
+meta {
+  name: Authorize client download
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/download/authorize
+  body: none
+  auth: none
+}
+
+tests {
+  test("204 with a session, 401 without", function () {
+    expect([204, 401]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  The subrequest target for the download server's nginx `auth_request`. nginx
+  forwards the player's cookies here and serves the ~18 GB client zip only on a
+  2xx, so the body is deliberately empty — only the status line matters.
+}

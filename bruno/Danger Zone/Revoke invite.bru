@@ -1,0 +1,22 @@
+meta {
+  name: Revoke invite
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{baseUrl}}/api/admin/invites?id={{inviteId}}
+  body: none
+  auth: none
+}
+
+params:query {
+  id: {{inviteId}}
+}
+
+docs {
+  Deletes an unused invite. Already-used invites are kept as a record of who
+  registered with what, so revoking one returns 409 rather than erasing it.
+
+  Set `inviteId` from `Admin / List invites`.
+}

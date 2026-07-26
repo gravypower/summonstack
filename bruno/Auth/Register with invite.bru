@@ -1,0 +1,31 @@
+meta {
+  name: Register with invite
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/auth/register
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "token": "{{inviteToken}}",
+    "username": "newplayer",
+    "password": "ChangeMe123",
+    "email": "newplayer@example.com"
+  }
+}
+
+docs {
+  Creates a game account and logs it straight in.
+
+  Constraints enforced server-side: username 3–16 letters or digits, password
+  8–16 visible ASCII characters (the 3.3.5a client silently truncates past 16).
+
+  The invite is claimed with a conditional UPDATE, so two people racing the same
+  link cannot both register; the loser gets 403. **This consumes the invite** —
+  edit the username before each run.
+}

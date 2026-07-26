@@ -1,0 +1,30 @@
+meta {
+  name: Check invite token
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/auth/register?token={{inviteToken}}
+  body: none
+  auth: none
+}
+
+params:query {
+  token: {{inviteToken}}
+}
+
+tests {
+  test("reports whether the token is usable", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().valid).to.be.a("boolean");
+  });
+}
+
+docs {
+  Called by the registration page before showing the form. Always returns 200 —
+  `valid: false` covers unknown, expired, and already-used tokens alike, so the
+  endpoint cannot be used to enumerate live invites.
+
+  Run `Admin / Create invite` first to populate `inviteToken`.
+}

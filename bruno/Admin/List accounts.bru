@@ -1,0 +1,38 @@
+meta {
+  name: List accounts
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/admin/accounts?q=
+  body: none
+  auth: none
+}
+
+params:query {
+  q:
+}
+
+script:post-response {
+  const accounts = res.getBody().accounts || [];
+  if (accounts.length > 0) {
+    bru.setVar("targetAccountId", accounts[accounts.length - 1].id);
+  }
+}
+
+tests {
+  test("returns accounts with ban and GM state", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().accounts).to.be.an("array");
+  });
+}
+
+docs {
+  `q` matches username or email; leave it empty to list everyone (capped at
+  200). Each row carries `gmlevel`, `banned`, character count, and whether any
+  character is online.
+
+  Publishes `targetAccountId` (the last row) for the Danger Zone requests —
+  check it points where you expect before firing those.
+}

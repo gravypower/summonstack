@@ -1,0 +1,29 @@
+meta {
+  name: Login (player)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "username": "{{playerUser}}",
+    "password": "{{playerPass}}"
+  }
+}
+
+tests {
+  test("logs in", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}
+
+docs {
+  Log in as an ordinary account to confirm the Admin routes correctly answer
+  403 rather than leaking data to non-admins.
+}

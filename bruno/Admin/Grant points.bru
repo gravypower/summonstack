@@ -1,0 +1,35 @@
+meta {
+  name: Grant points
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/admin/shop/grant
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "username": "{{playerUser}}",
+    "amount": 500,
+    "note": "granted from the Bruno collection"
+  }
+}
+
+tests {
+  test("credits the account", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().balance).to.be.a("number");
+  });
+}
+
+docs {
+  Writes the balance and a ledger row in one transaction, attributed to the
+  admin who sent the request.
+
+  A negative `amount` takes points back and is guarded by the same conditional
+  UPDATE as a purchase, so it returns 409 rather than pushing anyone below zero.
+  `amount` must be a non-zero integer within ±1,000,000.
+}
