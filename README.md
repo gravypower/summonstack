@@ -30,8 +30,8 @@ Task, then run `task` to see everything available:
 | `task up` / `task down` | Start / stop the stack |
 | `task logs -- ac-worldserver` | Follow one service's logs |
 | `task doctor` | Check for stale images, a missing `.env`, and container-name clashes |
-| `task admin USER=x PASS=y` | Create or promote a GM-level-3 account (add `SOAP=1` to wire the console too) |
-| `task soap USER=x PASS=y` | Point the admin console at an account and verify it end to end |
+| `task admin USER=x PASS=y` | Create or promote a GM-level-3 account, wiring the admin console on first setup |
+| `task soap USER=x PASS=y` | Repoint the admin console at an account and verify it end to end |
 | `task db -- acore_world` | MySQL shell (defaults to `acore_auth`) |
 | `task db:import` | Re-run the schema importer, failing loudly if it errors |
 | `task client:check` | Verify the download server without transferring gigabytes |
@@ -76,21 +76,18 @@ homepage at <http://localhost:8080> shows both servers **Online**.
 docker compose exec ac-webapp node scripts/create-admin.mjs myadmin MySecretPass1
 ```
 
-**4. Wire up the SOAP console.** Either let Task do it — which writes the
-credentials, reloads the webapp, and confirms the worldserver accepts them:
+**4. Wire up the SOAP console.** `task admin` already did this if the console
+had never been configured — it writes the credentials, reloads the webapp, and
+confirms the worldserver accepts them. To point the console at a *different*
+account later, which is not automatic so that creating a second admin cannot
+quietly take the console over:
 
 ```bash
-task soap USER=myadmin PASS=MySecretPass1
+task soap USER=someoneelse PASS=TheirPassword1
 ```
 
-or put the same credentials in `.env` (`SOAP_USER`, `SOAP_PASS`) by hand and
-reload:
-
-```bash
-docker compose up -d ac-webapp
-```
-
-Steps 3 and 4 collapse into one with `task admin USER=myadmin PASS=… SOAP=1`.
+By hand instead: set `SOAP_USER`/`SOAP_PASS` in `.env` and reload with
+`docker compose up -d ac-webapp`.
 
 **5. Log in** at <http://localhost:8080/login> with the admin account, open
 **Admin**, and create invite links for your players. Each link can be used

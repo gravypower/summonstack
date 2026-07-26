@@ -63,17 +63,30 @@ tasks:
 
   # ── Accounts ─────────────────────────────────────────────────────────────
   admin:
-    desc: "Create/promote a GM3 admin: task admin USER=myadmin PASS=pw [SOAP=1]"
+    desc: "Create/promote a GM3 admin (wires the console on first setup; SOAP=1 repoints it)"
     requires:
       vars: [USER, PASS]
     silent: true
     cmds:
       - docker compose exec ac-webapp node scripts/create-admin.mjs {{.USER}} {{.PASS}}
       - |
-        if [ -n "{{.SOAP}}" ]; then
+        # Wire the admin console automatically the first time, since a fresh
+        # install always wants it. SOAP=1 is only needed to repoint a console
+        # that is already configured, so creating a second admin cannot
+        # silently steal the console from the first.
+        cur_user=$(grep -E '^SOAP_USER=' .env 2>/dev/null | cut -d= -f2- || true)
+        cur_pass=$(grep -E '^SOAP_PASS=' .env 2>/dev/null | cut -d= -f2- || true)
+        if [ ! -f .env ]; then
+          echo ""
+          echo "No .env yet, so the admin console was not wired. Run:"
+          echo "  task setup && task soap USER={{.USER}} PASS=<the password>"
+        elif [ -n "{{.SOAP}}" ] || [ -z "$cur_pass" ]; then
+          echo ""
           task soap USER='{{.USER}}' PASS='{{.PASS}}'
         else
-          echo "(re-run with SOAP=1 to wire the admin console in one step)"
+          echo ""
+          echo "Admin console is already wired to '${cur_user}' — left alone."
+          echo "To repoint it at {{.USER}}, re-run with SOAP=1."
         fi
 
   soap:
