@@ -1,0 +1,138 @@
+# SummonStack — AzerothCore (WotLK 3.3.5a) + web portal, all in Docker Compose.
+#
+# Quickstart:
+#   1. copy .env.example to .env and edit the secrets
+#   2. docker compose up -d
+#   3. see README.md for creating the first admin account
+#
+# Uses the official prebuilt AzerothCore images (no compile step).
+
+services:
+  ac-database:
+    container_name: ac-database
+    image: mysql:8.4
+    networks:
+      - ac-network
+    ports:
+      # Bound to localhost only — for tools like Keira3/HeidiSQL on the host.
+      - 127.0.0.1:${DOCKER_DB_EXTERNAL_PORT:-3306}:3306
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DOCKER_DB_ROOT_PASSWORD:-password}
+    volumes:
+      - ac-database:/var/lib/mysql
+    restart: unless-stopped
+    healthcheck:
+      test: "/usr/bin/mysql --user=root --password=$$MYSQL_ROOT_PASSWORD --execute \"SHOW DATABASES;\""
+      interval: 5s
+      timeout: 10s
+      retries: 40
+
+  # One-shot: creates/updates acore_auth, acore_world, acore_characters.
+  ac-db-import:
+    container_name: ac-db-import
+    image: acore/ac-wotlk-db-import:${DOCKER_IMAGE_TAG:-master}
+    networks:
+      - ac-network
+    environment:
+      AC_DATA_DIR: "/azerothcore/env/dist/data"
+      AC_LOGS_DIR: "/azerothcore/env/dist/logs"
+      AC_LOGIN_DATABASE_INFO: "ac-database;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_auth"
+      AC_WORLD_DATABASE_INFO: "ac-database;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_world"
+      AC_CHARACTER_DATABASE_INFO: "ac-database;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_characters"
+    depends_on:
+      ac-database:
+        condition: service_healthy
+
+  # One-shot: downloads maps/vmaps/mmaps/dbc (~15 GB) into the shared volume.
+  ac-client-data-init:
+    container_name: ac-client-data-init
+    image: acore/ac-wotlk-client-data:${DOCKER_IMAGE_TAG:-master}
+    volumes:
+      - ac-client-data:/azerothcore/env/dist/data
+
+  ac-authserver:
+    container_name: ac-authserver
+    image: acore/ac-wotlk-authserver:${DOCKER_IMAGE_TAG:-master}
+    networks:
+      - ac-network
+    tty: true
+    restart: unless-stopped
+    environment:
+      AC_LOGS_DIR: "/azerothcore/env/dist/logs"
+      AC_TEMP_DIR: "/azerothcore/env/dist/temp"
+      AC_LOGIN_DATABASE_INFO: "ac-database;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_auth"
+    ports:
+      - ${DOCKER_AUTH_EXTERNAL_PORT:-3724}:3724
+    depends_on:
+      ac-database:
+        condition: service_healthy
+      ac-db-import:
+        condition: service_completed_successfully
+
+  ac-worldserver:
+    container_name: ac-worldserver
+    image: acore/ac-wotlk-worldserver:${DOCKER_IMAGE_TAG:-master}
+    networks:
+      - ac-network
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    environment:
+      AC_DATA_DIR: "/azerothcore/env/dist/data"
+      AC_LOGS_DIR: "/azerothcore/env/dist/logs"
+      AC_LOGIN_DATABASE_INFO: "ac-database;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_auth"
+      AC_WORLD_DATABASE_INFO: "ac-database;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_world"
+      AC_CHARACTER_DATABASE_INFO: "ac-database;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_characters"
+      # SOAP API for the web admin console (reachable only inside ac-network,
+      # plus localhost on the host below).
+      AC_SOAP_ENABLED: "1"
+      AC_SOAP_IP: "0.0.0.0"
+    ports:
+      - ${DOCKER_WORLD_EXTERNAL_PORT:-8085}:8085
+      - 127.0.0.1:${DOCKER_SOAP_EXTERNAL_PORT:-7878}:7878
+    volumes:
+      - ac-client-data:/azerothcore/env/dist/data/:ro
+    depends_on:
+      ac-database:
+        condition: service_healthy
+      ac-db-import:
+        condition: service_completed_successfully
+      ac-client-data-init:
+        condition: service_completed_successfully
+
+  # Player portal + admin site (Next.js).
+  ac-webapp:
+    container_name: ac-webapp
+    build: ./webapp
+    networks:
+      - ac-network
+    restart: unless-stopped
+    environment:
+      DB_HOST: ac-database
+      DB_PORT: "3306"
+      DB_USER: root
+      DB_PASS: ${DOCKER_DB_ROOT_PASSWORD:-password}
+      AUTH_DB: acore_auth
+      CHARS_DB: acore_characters
+      WEB_DB: summonstack_web
+      SOAP_URL: http://ac-worldserver:7878
+      SOAP_USER: ${SOAP_USER:-admin}
+      SOAP_PASS: ${SOAP_PASS:-}
+      SESSION_SECRET: ${SESSION_SECRET:-please-change-me}
+      SITE_URL: ${SITE_URL:-http://localhost:8080}
+      AUTH_HOST: ac-authserver
+      AUTH_PORT: "3724"
+      WORLD_HOST: ac-worldserver
+      WORLD_PORT: "8085"
+    ports:
+      - ${DOCKER_WEB_EXTERNAL_PORT:-8080}:3000
+    depends_on:
+      ac-database:
+        condition: service_healthy
+
+volumes:
+  ac-database:
+  ac-client-data:
+
+networks:
+  ac-network:

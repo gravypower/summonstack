@@ -1,0 +1,4 @@
+.env
+node_modules/
+.next/
+webapp/next-env.d.ts
