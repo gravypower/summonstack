@@ -15,10 +15,36 @@ King 3.3.5a) private server in Docker Compose, with a built-in web portal:
 | -------------------- | ------------------------------------------------- | ---------------- |
 | `ac-database`        | MySQL 8.4                                         | 127.0.0.1:3306   |
 | `ac-db-import`       | One-shot DB schema import/updates                 | —                |
-| `ac-client-data-init`| One-shot download of maps/DBC data (~15 GB)       | —                |
+| `ac-client-data-init`| One-shot download of maps/DBC data (~3 GB)         | —                |
 | `ac-authserver`      | Login server                                      | 3724             |
 | `ac-worldserver`     | Game server (SOAP API on 7878)                    | 8085, 127.0.0.1:7878 |
 | `ac-webapp`          | Next.js player portal + admin panel               | 8080             |
+
+## Task runner
+
+Common operations are wrapped in a [Taskfile](https://taskfile.dev). Install
+Task, then run `task` to see everything available:
+
+| Command | What it does |
+| ------- | ------------ |
+| `task up` / `task down` | Start / stop the stack |
+| `task logs -- ac-worldserver` | Follow one service's logs |
+| `task doctor` | Check for stale images, a missing `.env`, and container-name clashes |
+| `task admin USER=x PASS=y` | Create or promote a GM-level-3 account |
+| `task db -- acore_world` | MySQL shell (defaults to `acore_auth`) |
+| `task db:import` | Re-run the schema importer, failing loudly if it errors |
+| `task client:check` | Verify the download server without transferring gigabytes |
+| `task reset` | Rebuild all game DBs from scratch, keeping the 3 GB client data |
+| `task reset:hard` | Delete everything, volumes included |
+
+Both reset tasks prompt before doing anything and refuse to run outside a
+terminal, so they cannot fire from a script by accident.
+
+`task doctor` is worth running first whenever the stack misbehaves. The most
+common failure is a **stale cached image**: `:master` tags already present
+locally are not re-pulled, so an old `ac-db-import` can hand a months-old
+schema to a current `ac-worldserver`, which then crash-loops on missing
+tables. `task pull && task db:import` fixes it.
 
 ## First-time setup
 
@@ -31,7 +57,7 @@ it (or copy `.env.example` to `.env` and fill it in yourself).
 docker compose up -d
 ```
 
-The first start downloads the AzerothCore images and ~15 GB of client data
+The first start downloads the AzerothCore images and ~3 GB of client data
 (maps, vmaps, mmaps, DBC), and imports all databases. Depending on your
 connection this takes a while. Watch progress with:
 
@@ -69,11 +95,42 @@ others connect, point the realm at your LAN IP or public hostname:
 docker compose exec ac-database mysql -uroot -p"$(grep ^DOCKER_DB_ROOT_PASSWORD .env | cut -d= -f2)" -e "UPDATE acore_auth.realmlist SET address='YOUR.LAN.OR.PUBLIC.IP' WHERE id=1;"
 ```
 
-Also update `SITE_URL` in `.env` so invite links use the right hostname, and
-forward/allow TCP **3724** (login), **8085** (world), and **8080** (website).
+Also update `SITE_URL` and `DOWNLOAD_URL` in `.env` so invite links and the
+client download use the right hostname, and forward/allow TCP **3724**
+(login), **8085** (world), **8080** (website), and **8081** (downloads).
 
 Players need a 3.3.5a client with `Data/<locale>/realmlist.wtf` set to
 `set realmlist YOUR.LAN.OR.PUBLIC.IP` — the homepage shows the exact line.
+
+## Serving the game client
+
+`ac-downloads` is a small nginx container that hands out the client zip so an
+~18 GB transfer never goes through the Node app. Point `CLIENT_ZIP_PATH` at
+the file on the host (default `./ChromieCraft_3.3.5a.zip`) and it is published
+at `/files/client.zip`, which the homepage links to.
+
+The URL is fixed while `CLIENT_ZIP_NAME` controls the filename the browser
+saves, so replacing the client later does not break links players already
+have. Downloads are **range/resume capable** — verified past the 17 GB offset,
+so an interrupted transfer picks up where it left off.
+
+Access requires a portal login: nginx calls `/api/download/authorize` on the
+webapp via `auth_request` and redirects anyone without a session to
+`SITE_URL/login`. `DOWNLOAD_URL` must therefore share a hostname with
+`SITE_URL`, otherwise the login cookie is not sent with the download request.
+(Ports do not matter — cookies are not port-scoped.)
+
+Anything else dropped in `downloads/files/` is published at `/files/<name>`
+under the same login requirement — handy for patches or addon packs.
+`downloads/files/test.txt` is a tiny fixture for checking the server without
+moving gigabytes:
+
+```bash
+curl -i -b "ss_session=<your cookie>" http://localhost:8081/files/test.txt
+```
+
+Note that the client zip is Blizzard's copyrighted software; how widely you
+expose it is your call.
 
 ## Day-to-day operations
 
@@ -122,6 +179,8 @@ docker compose up -d
   same username/password works on the website and in the game.
 - Invite links live in the webapp's own `summonstack_web` database; each
   token is claimed atomically so it can never be used twice.
+- `ac-downloads` holds no credentials and never touches the DB — it asks the
+  webapp whether the requester is logged in and serves bytes off disk.
 - Admin access = **GM level 3** in `acore_auth.account_access`. The webapp
   checks it live on every admin request, so demoting an account locks them
   out of `/admin` immediately.

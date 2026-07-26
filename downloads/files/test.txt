@@ -1,0 +1,2 @@
+SummonStack download server test file.
+If you can read this, auth + static serving work.

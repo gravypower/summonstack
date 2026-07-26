@@ -2,3 +2,7 @@
 node_modules/
 .next/
 webapp/next-env.d.ts
+ChromieCraft_3.3.5a.zip
+
+# Large local test artifacts for the download server.
+downloads/files/*.bin
