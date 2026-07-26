@@ -26,6 +26,10 @@ services:
       interval: 5s
       timeout: 10s
       retries: 40
+      # First boot initialises the data directory, which can take well over ten
+      # minutes on a slow disk. Failures during start_period do not count
+      # against `retries`, so the stack waits instead of aborting.
+      start_period: 15m
 
   # One-shot: creates/updates acore_auth, acore_world, acore_characters.
   ac-db-import:
