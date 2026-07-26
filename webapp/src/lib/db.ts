@@ -139,6 +139,26 @@ export async function ensureWebDb(): Promise<void> {
       for (const ddl of SHOP_DDL) {
         await pool.query(ddl.replace("__WEB_DB__", WEB_DB));
       }
+      // Single row, read by worldserver/lua_scripts/joyous_journeys.lua.
+      // updated_at is written explicitly rather than ON UPDATE: the Lua script
+      // touches seen_at every few seconds and must not look like an edit.
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS \`${WEB_DB}\`.xp_event (
+           id TINYINT UNSIGNED NOT NULL DEFAULT 1,
+           name VARCHAR(64) NOT NULL DEFAULT 'Joyous Journeys',
+           enabled TINYINT(1) NOT NULL DEFAULT 0,
+           multiplier_pct SMALLINT UNSIGNED NOT NULL DEFAULT 150,
+           aura_spell INT UNSIGNED NOT NULL DEFAULT 12655,
+           ends_at DATETIME NULL,
+           updated_by VARCHAR(32) NULL,
+           updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+           seen_at DATETIME NULL,
+           PRIMARY KEY (id)
+         ) ENGINE=InnoDB`
+      );
+      await pool.query(
+        `INSERT IGNORE INTO \`${WEB_DB}\`.xp_event (id) VALUES (1)`
+      );
     })().catch((err) => {
       global.__ssWebDbReady = undefined;
       throw err;

@@ -87,6 +87,37 @@ API routes under `/api/shop/*`, and an admin grant route.
   have arrived) — check `summonstack_web.shop_transactions` and the game's
   mail log before refunding by hand.
 
+## XP events
+
+**Admin → XP event** (`/admin/event`) runs a server-wide experience boost —
+the 3.3.5a equivalent of Joyous Journeys — with no restart and nobody
+disconnected. Set a multiplier, optionally an end time, and start it.
+
+- **How it works.** The panel writes one row to `summonstack_web.xp_event`.
+  `worldserver/lua_scripts/joyous_journeys.lua` polls that row every 15
+  seconds and multiplies XP in the worldserver's `OnGiveXP` hook, which
+  covers kill, quest and exploration XP alike. Rested and heirloom bonuses
+  stack on top as usual.
+- **Players are told**: a server-wide announcement on start and end, a line
+  in chat on login while it runs, and a buff icon for as long as it lasts.
+- **About the buff icon.** Joyous Journeys itself is a Classic-2019 spell
+  and does not exist in 3.3.5a, so the icon is spell 12655
+  ("Enlightenment"), which has no combat effect. It is decoration only — the
+  XP comes from the script — so any spell id works, and `0` runs the event
+  with no icon. Avoid 57353/71354: those are the heirloom XP auras and would
+  add a real bonus on top of the multiplier.
+- **The script is mounted, not baked in.** `worldserver/lua_scripts` is bind
+  mounted into `ac-worldserver`, and `worldserver/mod_ale.conf` turns the
+  image's bundled Lua engine on — it ships only a `.conf.dist`, so without
+  that file nothing runs. Both arrive with `docker compose up -d`; until a
+  checkout has done that, the toggle saves but the game ignores it, and the
+  panel says so rather than pretending the event is live.
+- **Editing the script needs no restart.** The engine watches the directory
+  and reloads within a second or two of a save, including through the bind
+  mount. `.reload ale` in the admin console forces it. A broken script logs
+  `[ALE]: Error loading ...` with a line number to `task logs -- ac-worldserver`
+  and leaves the other scripts running.
+
 ## API collection
 
 `bruno/` is a [Bruno](https://usebruno.com) collection covering every portal

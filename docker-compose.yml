@@ -91,11 +91,21 @@ services:
       # plus localhost on the host below).
       AC_SOAP_ENABLED: "1"
       AC_SOAP_IP: "0.0.0.0"
+      # The Lua engine that runs the XP event script is configured by the
+      # mod_ale.conf mounted below, not from here.
     ports:
       - ${DOCKER_WORLD_EXTERNAL_PORT:-8085}:8085
       - 127.0.0.1:${DOCKER_SOAP_EXTERNAL_PORT:-7878}:7878
     volumes:
       - ac-client-data:/azerothcore/env/dist/data/:ro
+      # Turns the bundled Lua engine on and gives it somewhere to log; the
+      # image installs only the .dist next to this path.
+      - ./worldserver/mod_ale.conf:/azerothcore/env/dist/etc/modules/mod_ale.conf:ro
+      # Lua event scripts. The worldserver's CWD is /azerothcore and ScriptPath
+      # is the relative "lua_scripts", so this is the directory it scans. It
+      # watches the directory and reloads on change, so editing a script here
+      # needs no restart.
+      - ./worldserver/lua_scripts:/azerothcore/lua_scripts:ro
     depends_on:
       ac-database:
         condition: service_healthy

@@ -1,0 +1,41 @@
+meta {
+  name: Set XP event
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/admin/event
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "Joyous Journeys",
+    "enabled": false,
+    "multiplier": 1.5,
+    "auraSpell": 12655,
+    "endsInHours": 48
+  }
+}
+
+tests {
+  test("saves the event", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().event.multiplier).to.equal(1.5);
+  });
+}
+
+docs {
+  Starts, stops and reconfigures the XP event. Sent with `enabled: false` here
+  so running the collection never switches the boost on by accident.
+
+  Fields left out keep their current value, with one exception: `endsInHours`
+  is measured from this request, so omitting it (or sending null) means "run
+  until stopped" rather than keeping the previous end time.
+
+  `multiplier` is 1–10 and stored to two decimals. `auraSpell` is only the buff
+  icon players see — the XP itself comes from the Lua hook, and 0 runs the event
+  without an icon.
+}

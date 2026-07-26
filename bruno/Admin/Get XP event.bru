@@ -1,0 +1,32 @@
+meta {
+  name: Get XP event
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/api/admin/event
+  body: none
+  auth: none
+}
+
+tests {
+  test("reports the event state", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().event.multiplier).to.be.a("number");
+  });
+
+  test("the worldserver is reading the setting", function () {
+    // False means the Lua script is not mounted or the worldserver is down,
+    // in which case the toggle saves but nothing happens in game.
+    expect(res.getBody().event.worldserverReading).to.equal(true);
+  });
+}
+
+docs {
+  State of the server-wide XP event.
+
+  `active` is the one that matters: it is `enabled` and not past `endsAt`.
+  `worldserverReading` is a heartbeat — the Lua script stamps `seenAt` every 15
+  seconds, so a false here means the game server never picked the script up.
+}
