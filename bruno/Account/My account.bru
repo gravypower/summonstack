@@ -1,0 +1,27 @@
+meta {
+  name: My account
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/account/me
+  body: none
+  auth: none
+}
+
+tests {
+  test("returns the signed-in profile", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().username).to.be.a("string");
+  });
+
+  test("reports admin status", function () {
+    expect(res.getBody().isAdmin).to.be.a("boolean");
+  });
+}
+
+docs {
+  `isAdmin` is read live from `account_access`, not from the session token, so
+  revoking GM level takes effect immediately without needing a re-login.
+}

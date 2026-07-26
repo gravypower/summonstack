@@ -1,0 +1,30 @@
+meta {
+  name: Admin shop overview
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/admin/shop/grant
+  body: none
+  auth: none
+}
+
+tests {
+  test("admin can read balances and the ledger", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().balances).to.be.an("array");
+    expect(res.getBody().ledger).to.be.an("array");
+  });
+
+  test("ledger entries are signed and attributed", function () {
+    res.getBody().ledger.forEach(function (row) {
+      expect(row.delta).to.be.a("number");
+      expect(row.reason).to.be.a("string");
+    });
+  });
+}
+
+docs {
+  Doubles as the admin-authorisation check: a non-admin session gets 403 here.
+}

@@ -1,0 +1,36 @@
+meta {
+  name: Run SOAP command
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/admin/soap
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "command": "server info"
+  }
+}
+
+tests {
+  test("relays the worldserver reply", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().output).to.be.a("string");
+  });
+}
+
+docs {
+  Runs a worldserver console command as the `SOAP_USER` account from `.env`,
+  which must be GM level 3.
+
+  A 200 with `success: false` means the command reached the worldserver and was
+  rejected, or the worldserver could not be reached at all — the body says
+  which. This is the same transport the shop uses to deliver level boosts
+  (`.character level`) and item packs (`.send items`).
+
+  Try `server info`, `account onlinelist`, or `server motd`.
+}

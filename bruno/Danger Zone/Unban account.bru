@@ -1,0 +1,23 @@
+meta {
+  name: Unban account
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/admin/accounts/actions
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "accountId": {{targetAccountId}},
+    "action": "unban"
+  }
+}
+
+docs {
+  Sets `active = 0` on the ban row rather than deleting it, so the ban history
+  survives for auditing.
+}

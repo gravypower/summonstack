@@ -1,0 +1,24 @@
+meta {
+  name: My purchase history
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/shop/transactions
+  body: none
+  auth: none
+}
+
+tests {
+  test("returns this account's orders", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().transactions).to.be.an("array");
+  });
+}
+
+docs {
+  Scoped to the logged-in account. A row stuck in `delivering` means the SOAP
+  call timed out with the outcome unknown — those are parked for an admin to
+  reconcile against the game's mail table rather than auto-refunded.
+}

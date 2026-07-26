@@ -37,6 +37,7 @@ export default async function RootLayout({
             </Link>
             <nav className="nav" style={{ flex: 1 }}>
               <Link href="/">Home</Link>
+              {session && <Link href="/shop">Shop</Link>}
               {session && <Link href="/account">My Account</Link>}
               {isAdmin && <Link href="/admin">Admin</Link>}
               <span className="spacer" />

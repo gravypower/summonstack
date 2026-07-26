@@ -22,6 +22,7 @@ export default async function AdminLayout({
         <nav className="nav">
           <Link href="/admin">Invites</Link>
           <Link href="/admin/accounts">Accounts</Link>
+          <Link href="/admin/shop">Shop points</Link>
           <Link href="/admin/console">Console</Link>
         </nav>
       </div>

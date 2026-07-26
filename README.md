@@ -8,6 +8,9 @@ King 3.3.5a) private server in Docker Compose, with a built-in web portal:
 - **Admin panel** — one-click invite links, account management
   (ban/unban, GM levels, password resets), and a live worldserver console
   over SOAP.
+- **Shop backend** — a points currency with an append-only ledger, level-80
+  boosts, profession boosts, and 60/70/80 starter packs delivered by in-game
+  mail over SOAP. See [Shop](#shop) below.
 
 ## Stack
 
@@ -32,6 +35,8 @@ Task, then run `task` to see everything available:
 | `task doctor` | Check for stale images, a missing `.env`, and container-name clashes |
 | `task admin USER=x PASS=y` | Create or promote a GM-level-3 account, wiring the admin console on first setup |
 | `task soap USER=x PASS=y` | Repoint the admin console at an account and verify it end to end |
+| `task shop:seed` | Load/refresh the shop catalog and starter packs |
+| `task shop:grant USER=x AMOUNT=500` | Grant shop points to an account |
 | `task db -- acore_world` | MySQL shell (defaults to `acore_auth`) |
 | `task db:import` | Re-run the schema importer, failing loudly if it errors |
 | `task client:check` | Verify the download server without transferring gigabytes |
@@ -46,6 +51,59 @@ common failure is a **stale cached image**: `:master` tags already present
 locally are not re-pulled, so an old `ac-db-import` can hand a months-old
 schema to a current `ac-worldserver`, which then crash-loops on missing
 tables. `task pull && task db:import` fixes it.
+
+## Shop
+
+The webapp ships a points shop at `/shop` (in the nav once logged in): a
+points currency stored in `summonstack_web` with an append-only ledger,
+API routes under `/api/shop/*`, and an admin grant route.
+
+- **Products** — level-80 boost, profession boost (maxes learned primary +
+  secondary professions to 450; the character must be logged out), 60/70/80
+  starter packs (pre-raid gear for the character's class/spec), and 60/70/80
+  raid consumable packs (flasks, elixirs, potions, weapon oils, protection
+  potions, buff food). Everything arrives by in-game mail.
+- **Gear coverage** — all three starter packs cover 9 classes × 17 specs,
+  including tank and healer sets. A few slots are intentionally empty where
+  no suitable item exists at that bracket; the `note` field on each entry
+  names the item so lists are reviewable without a database lookup.
+- **Load the catalog** with `task shop:seed`. Pack contents live in
+  `webapp/data/packs/*.json` — edit those and re-run the seed, which
+  validates every item id against `acore_world.item_template`, aborts on
+  unknown ids, and warns when a `count` exceeds the item's stack size.
+- **Give players points** in the admin panel under **Shop points**
+  (`/admin/shop`): grant or deduct by account name with a reason, and see
+  every balance plus the full ledger. `task shop:grant USER=name AMOUNT=500`
+  does the same from the terminal.
+- **How players receive purchases** — level and profession boosts apply to
+  the character directly; item packs arrive as in-game **mail** from the
+  worldserver. Mail holds 12 attachments, so a full gear pack is split
+  across two or three letters. Tell players to check a mailbox; mail expires
+  after 30 days if never collected.
+- **Prices** are seeded once and then owned by the DB — edit
+  `summonstack_web.shop_products` to tune them; reseeds won't overwrite.
+- **Stuck orders**: deliveries that fail cleanly refund automatically. A
+  SOAP timeout leaves the order in `delivering` (the goods may or may not
+  have arrived) — check `summonstack_web.shop_transactions` and the game's
+  mail log before refunding by hand.
+
+## API collection
+
+`bruno/` is a [Bruno](https://usebruno.com) collection covering every portal
+route — auth, account, shop, and admin. Open that directory in Bruno, pick the
+**Local** environment, fill in the two secret password variables, and run
+`Auth / Login` first: the session cookie is picked up automatically from there.
+
+The `Smoke` folder logs in and then only reads, so it works as a post-deploy
+check with the CLI:
+
+```bash
+cd bruno && bru run Smoke --env Local
+```
+
+Destructive admin actions (bans, GM levels, password resets) live in a separate
+`Danger Zone` folder so a stray full-collection run cannot fire them. See
+[bruno/README.md](bruno/README.md).
 
 ## First-time setup
 

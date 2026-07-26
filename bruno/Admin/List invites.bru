@@ -1,0 +1,18 @@
+meta {
+  name: List invites
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/admin/invites
+  body: none
+  auth: none
+}
+
+tests {
+  test("returns invites", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().invites).to.be.an("array");
+  });
+}

@@ -1,0 +1,52 @@
+meta {
+  name: Purchase a pack
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/shop/purchase
+  body: json
+  auth: none
+}
+
+script:pre-request {
+  // A fresh key per send. Reusing one returns the original order instead of
+  // charging twice, which is exactly what a double-clicked Buy button does.
+  const { v4: uuid } = require("uuid");
+  bru.setVar("idempotencyKey", uuid());
+}
+
+body:json {
+  {
+    "productSlug": "{{productSlug}}",
+    "characterGuid": {{characterGuid}},
+    "spec": "{{spec}}",
+    "idempotencyKey": "{{idempotencyKey}}"
+  }
+}
+
+tests {
+  test("route answers without a server error", function () {
+    expect(res.getStatus()).to.be.below(500);
+  });
+}
+
+docs {
+  **Spends points and mails items.** Run `My balance and characters` first to
+  populate `characterGuid`.
+
+  Expected replies:
+
+  - `200` with `status: "delivered"` — mail is in the character's mailbox.
+  - `200` with `status: "refunded"` — delivery failed cleanly and the points
+    were returned; `error` says why.
+  - `402` — not enough points.
+  - `404` — the guid is not on this account, or the product slug is unknown.
+  - `409` — ineligible: already max level, below the pack's minimum level, no
+    professions to boost, or the character is online for a profession boost.
+  - `400` — a spec is required for this class and pack but was missing.
+
+  To replay a purchase idempotently, disable the pre-request script so the same
+  key is reused; the original order comes back untouched.
+}

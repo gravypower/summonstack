@@ -1,0 +1,372 @@
+{
+  "slug": "tbc",
+  "name": "TBC Starter Pack (70)",
+  "level_cap": 70,
+  "min_level": 70,
+  "consumables": [
+    { "item_id": 22838, "count": 20, "note": "Haste Potion" },
+    { "item_id": 22854, "count": 5, "note": "Flask of Relentless Assault" },
+    { "item_id": 22831, "count": 10, "note": "Elixir of Major Agility" },
+    { "item_id": 22829, "count": 20, "note": "Super Healing Potion" },
+    { "item_id": 22832, "count": 20, "note": "Super Mana Potion" }
+  ],
+  "classes": {
+    "warrior": {
+      "class_consumables": [],
+      "specs": {
+        "fury": {
+          "gear": [
+            { "item_id": 23519, "slot": "head", "note": "Felsteel Helm" },
+            { "item_id": 27779, "slot": "neck", "note": "Bone Chain Necklace" },
+            { "item_id": 32570, "slot": "shoulder", "note": "Swiftsteel Shoulders" },
+            { "item_id": 27878, "slot": "back", "note": "Auchenai Death Shroud" },
+            { "item_id": 23522, "slot": "chest", "note": "Ragesteel Breastplate" },
+            { "item_id": 32568, "slot": "wrist", "note": "Swiftsteel Bracers" },
+            { "item_id": 23520, "slot": "hands", "note": "Ragesteel Gloves" },
+            { "item_id": 23524, "slot": "waist", "note": "Khorium Belt" },
+            { "item_id": 23518, "slot": "legs", "note": "Felsteel Leggings" },
+            { "item_id": 23525, "slot": "feet", "note": "Khorium Boots" },
+            { "item_id": 28649, "slot": "ring1", "note": "Garona's Signet Ring" },
+            { "item_id": 29283, "slot": "ring2", "note": "Violet Signet of the Master Assassin" },
+            { "item_id": 28041, "slot": "trinket1", "note": "Bladefist's Breadth" },
+            { "item_id": 28121, "slot": "trinket2", "note": "Icon of Unyielding Courage" },
+            { "item_id": 28189, "slot": "mainhand", "note": "Latro's Shifting Sword" },
+            { "item_id": 28295, "slot": "offhand", "note": "Gladiator's Slicer" }
+          ]
+        },
+        "protection": {
+          "gear": [
+            { "item_id": 28350, "slot": "head", "note": "Warhelm of the Bold" },
+            { "item_id": 27779, "slot": "neck", "note": "Bone Chain Necklace" },
+            { "item_id": 33173, "slot": "shoulder", "note": "Ragesteel Shoulders" },
+            { "item_id": 29382, "slot": "back", "note": "Blood Knight War Cloak" },
+            { "item_id": 23522, "slot": "chest", "note": "Ragesteel Breastplate" },
+            { "item_id": 27475, "slot": "hands", "note": "Gauntlets of the Bold" },
+            { "item_id": 27672, "slot": "waist", "note": "Girdle of the Immovable" },
+            { "item_id": 23518, "slot": "legs", "note": "Felsteel Leggings" },
+            { "item_id": 30033, "slot": "feet", "note": "Boots of the Protector" },
+            { "item_id": 27436, "slot": "ring1", "note": "Iron Band of the Unbreakable" },
+            { "item_id": 28407, "slot": "ring2", "note": "Elementium Band of the Sentry" },
+            { "item_id": 27828, "slot": "trinket1", "note": "Warp-Scarab Brooch" },
+            { "item_id": 28749, "slot": "mainhand", "note": "King's Defender" },
+            { "item_id": 29176, "slot": "shield", "note": "Crest of the Sha'tar" }
+          ]
+        }
+      }
+    },
+    "paladin": {
+      "class_consumables": [],
+      "specs": {
+        "holy": {
+          "gear": [
+            { "item_id": 32090, "slot": "head", "note": "Cowl of Naaru Blessings" },
+            { "item_id": 30008, "slot": "neck", "note": "Pendant of the Lost Ages" },
+            { "item_id": 32573, "slot": "shoulder", "note": "Dawnsteel Shoulders" },
+            { "item_id": 28570, "slot": "back", "note": "Shadow-Cloak of Dalaran" },
+            { "item_id": 28230, "slot": "chest", "note": "Hallowed Garments" },
+            { "item_id": 32571, "slot": "wrist", "note": "Dawnsteel Bracers" },
+            { "item_id": 34367, "slot": "hands", "note": "Hands of Eternal Light" },
+            { "item_id": 21873, "slot": "waist", "note": "Primal Mooncloth Belt" },
+            { "item_id": 24261, "slot": "legs", "note": "Whitemend Pants" },
+            { "item_id": 30035, "slot": "feet", "note": "Boots of the Long Road" },
+            { "item_id": 29367, "slot": "ring1", "note": "Ring of Cryptic Dreams" },
+            { "item_id": 30667, "slot": "ring2", "note": "Ring of Unrelenting Storms" },
+            { "item_id": 29376, "slot": "trinket1", "note": "Essence of the Martyr" },
+            { "item_id": 29175, "slot": "mainhand", "note": "Gavel of Pure Light" },
+            { "item_id": 29458, "slot": "shield", "note": "Aegis of the Vindicator" }
+          ]
+        },
+        "protection": {
+          "gear": [
+            { "item_id": 28350, "slot": "head", "note": "Warhelm of the Bold" },
+            { "item_id": 27779, "slot": "neck", "note": "Bone Chain Necklace" },
+            { "item_id": 33173, "slot": "shoulder", "note": "Ragesteel Shoulders" },
+            { "item_id": 29382, "slot": "back", "note": "Blood Knight War Cloak" },
+            { "item_id": 23522, "slot": "chest", "note": "Ragesteel Breastplate" },
+            { "item_id": 27475, "slot": "hands", "note": "Gauntlets of the Bold" },
+            { "item_id": 27672, "slot": "waist", "note": "Girdle of the Immovable" },
+            { "item_id": 23518, "slot": "legs", "note": "Felsteel Leggings" },
+            { "item_id": 30033, "slot": "feet", "note": "Boots of the Protector" },
+            { "item_id": 27436, "slot": "ring1", "note": "Iron Band of the Unbreakable" },
+            { "item_id": 28407, "slot": "ring2", "note": "Elementium Band of the Sentry" },
+            { "item_id": 27828, "slot": "trinket1", "note": "Warp-Scarab Brooch" },
+            { "item_id": 28749, "slot": "mainhand", "note": "King's Defender" },
+            { "item_id": 29266, "slot": "shield", "note": "Azure-Shield of Coldarra" }
+          ]
+        },
+        "retribution": {
+          "gear": [
+            { "item_id": 23519, "slot": "head", "note": "Felsteel Helm" },
+            { "item_id": 27779, "slot": "neck", "note": "Bone Chain Necklace" },
+            { "item_id": 32570, "slot": "shoulder", "note": "Swiftsteel Shoulders" },
+            { "item_id": 27878, "slot": "back", "note": "Auchenai Death Shroud" },
+            { "item_id": 23522, "slot": "chest", "note": "Ragesteel Breastplate" },
+            { "item_id": 32568, "slot": "wrist", "note": "Swiftsteel Bracers" },
+            { "item_id": 23520, "slot": "hands", "note": "Ragesteel Gloves" },
+            { "item_id": 23524, "slot": "waist", "note": "Khorium Belt" },
+            { "item_id": 23518, "slot": "legs", "note": "Felsteel Leggings" },
+            { "item_id": 23525, "slot": "feet", "note": "Khorium Boots" },
+            { "item_id": 30061, "slot": "ring1", "note": "Ancestral Ring of Conquest" },
+            { "item_id": 28649, "slot": "ring2", "note": "Garona's Signet Ring" },
+            { "item_id": 28041, "slot": "trinket1", "note": "Bladefist's Breadth" },
+            { "item_id": 28121, "slot": "trinket2", "note": "Icon of Unyielding Courage" },
+            { "item_id": 30722, "slot": "mainhand", "note": "Ethereum Nexus-Reaver (2H)" }
+          ]
+        }
+      }
+    },
+    "hunter": {
+      "class_consumables": [],
+      "specs": {
+        "dps": {
+          "gear": [
+            { "item_id": 28275, "slot": "head", "note": "Beast Lord Helm" },
+            { "item_id": 27779, "slot": "neck", "note": "Bone Chain Necklace" },
+            { "item_id": 27801, "slot": "shoulder", "note": "Beast Lord Mantle" },
+            { "item_id": 27878, "slot": "back", "note": "Auchenai Death Shroud" },
+            { "item_id": 28228, "slot": "chest", "note": "Beast Lord Cuirass" },
+            { "item_id": 29521, "slot": "wrist", "note": "Netherstrike Bracers" },
+            { "item_id": 27474, "slot": "hands", "note": "Beast Lord Handguards" },
+            { "item_id": 29520, "slot": "waist", "note": "Netherstrike Belt" },
+            { "item_id": 27874, "slot": "legs", "note": "Beast Lord Leggings" },
+            { "item_id": 28649, "slot": "ring1", "note": "Garona's Signet Ring" },
+            { "item_id": 29997, "slot": "ring2", "note": "Band of the Ranger-General" },
+            { "item_id": 28041, "slot": "trinket1", "note": "Bladefist's Breadth" },
+            { "item_id": 28121, "slot": "trinket2", "note": "Icon of Unyielding Courage" },
+            { "item_id": 27903, "slot": "mainhand", "note": "Sonic Spear (polearm)" },
+            { "item_id": 28772, "slot": "ranged", "note": "Sunfury Bow of the Phoenix" }
+          ]
+        }
+      }
+    },
+    "rogue": {
+      "class_consumables": [],
+      "specs": {
+        "dps": {
+          "gear": [
+            { "item_id": 28224, "slot": "head", "note": "Wastewalker Helm" },
+            { "item_id": 27779, "slot": "neck", "note": "Bone Chain Necklace" },
+            { "item_id": 27797, "slot": "shoulder", "note": "Wastewalker Shoulderpads" },
+            { "item_id": 27878, "slot": "back", "note": "Auchenai Death Shroud" },
+            { "item_id": 28264, "slot": "chest", "note": "Wastewalker Tunic" },
+            { "item_id": 27531, "slot": "hands", "note": "Wastewalker Gloves" },
+            { "item_id": 27837, "slot": "legs", "note": "Wastewalker Leggings" },
+            { "item_id": 28339, "slot": "feet", "note": "Boots of the Shifting Sands" },
+            { "item_id": 28649, "slot": "ring1", "note": "Garona's Signet Ring" },
+            { "item_id": 29283, "slot": "ring2", "note": "Violet Signet of the Master Assassin" },
+            { "item_id": 28041, "slot": "trinket1", "note": "Bladefist's Breadth" },
+            { "item_id": 28121, "slot": "trinket2", "note": "Icon of Unyielding Courage" },
+            { "item_id": 28524, "slot": "mainhand", "note": "Emerald Ripper" },
+            { "item_id": 29348, "slot": "offhand", "note": "The Bladefist" },
+            { "item_id": 27507, "slot": "ranged", "note": "Adamantine Repeater" }
+          ]
+        }
+      }
+    },
+    "priest": {
+      "class_consumables": [],
+      "specs": {
+        "healing": {
+          "gear": [
+            { "item_id": 32090, "slot": "head", "note": "Cowl of Naaru Blessings" },
+            { "item_id": 30008, "slot": "neck", "note": "Pendant of the Lost Ages" },
+            { "item_id": 21874, "slot": "shoulder", "note": "Primal Mooncloth Shoulders" },
+            { "item_id": 28570, "slot": "back", "note": "Shadow-Cloak of Dalaran" },
+            { "item_id": 21875, "slot": "chest", "note": "Primal Mooncloth Robe" },
+            { "item_id": 32586, "slot": "wrist", "note": "Bracers of Nimble Thought" },
+            { "item_id": 34367, "slot": "hands", "note": "Hands of Eternal Light" },
+            { "item_id": 21873, "slot": "waist", "note": "Primal Mooncloth Belt" },
+            { "item_id": 24261, "slot": "legs", "note": "Whitemend Pants" },
+            { "item_id": 30035, "slot": "feet", "note": "Boots of the Long Road" },
+            { "item_id": 29367, "slot": "ring1", "note": "Ring of Cryptic Dreams" },
+            { "item_id": 30667, "slot": "ring2", "note": "Ring of Unrelenting Storms" },
+            { "item_id": 29376, "slot": "trinket1", "note": "Essence of the Martyr" },
+            { "item_id": 28522, "slot": "mainhand", "note": "Shard of the Virtuous" },
+            { "item_id": 29458, "slot": "shield", "note": "Aegis of the Vindicator" }
+          ]
+        },
+        "shadow": {
+          "gear": [
+            { "item_id": 24266, "slot": "head", "note": "Spellstrike Hood" },
+            { "item_id": 30008, "slot": "neck", "note": "Pendant of the Lost Ages" },
+            { "item_id": 21869, "slot": "shoulder", "note": "Frozen Shadoweave Shoulders" },
+            { "item_id": 30735, "slot": "back", "note": "Ancient Spellcloak of the Highborne" },
+            { "item_id": 21871, "slot": "chest", "note": "Frozen Shadoweave Robe" },
+            { "item_id": 24250, "slot": "wrist", "note": "Bracers of Havok" },
+            { "item_id": 27465, "slot": "hands", "note": "Mana-Etched Gloves" },
+            { "item_id": 24256, "slot": "waist", "note": "Girdle of Ruination" },
+            { "item_id": 24262, "slot": "legs", "note": "Spellstrike Pants" },
+            { "item_id": 21870, "slot": "feet", "note": "Frozen Shadoweave Boots" },
+            { "item_id": 30667, "slot": "ring1", "note": "Ring of Unrelenting Storms" },
+            { "item_id": 29367, "slot": "ring2", "note": "Ring of Cryptic Dreams" },
+            { "item_id": 29179, "slot": "trinket1", "note": "Xi'ri's Gift" },
+            { "item_id": 30723, "slot": "mainhand", "note": "Talon of the Tempest" },
+            { "item_id": 28386, "slot": "ranged", "note": "Nether Core's Control Rod (wand)" }
+          ]
+        }
+      }
+    },
+    "shaman": {
+      "class_consumables": [],
+      "specs": {
+        "healing": {
+          "gear": [
+            { "item_id": 28349, "slot": "head", "note": "Tidefury Helm" },
+            { "item_id": 30008, "slot": "neck", "note": "Pendant of the Lost Ages" },
+            { "item_id": 27802, "slot": "shoulder", "note": "Tidefury Shoulderguards" },
+            { "item_id": 28570, "slot": "back", "note": "Shadow-Cloak of Dalaran" },
+            { "item_id": 28231, "slot": "chest", "note": "Tidefury Chestpiece" },
+            { "item_id": 27510, "slot": "hands", "note": "Tidefury Gauntlets" },
+            { "item_id": 27909, "slot": "legs", "note": "Tidefury Kilt" },
+            { "item_id": 30035, "slot": "feet", "note": "Boots of the Long Road" },
+            { "item_id": 29367, "slot": "ring1", "note": "Ring of Cryptic Dreams" },
+            { "item_id": 30667, "slot": "ring2", "note": "Ring of Unrelenting Storms" },
+            { "item_id": 30663, "slot": "trinket1", "note": "Fathom-Brooch of the Tidewalker" },
+            { "item_id": 29175, "slot": "mainhand", "note": "Gavel of Pure Light" },
+            { "item_id": 29458, "slot": "shield", "note": "Aegis of the Vindicator" }
+          ]
+        },
+        "elemental": {
+          "gear": [
+            { "item_id": 28349, "slot": "head", "note": "Tidefury Helm" },
+            { "item_id": 30008, "slot": "neck", "note": "Pendant of the Lost Ages" },
+            { "item_id": 27802, "slot": "shoulder", "note": "Tidefury Shoulderguards" },
+            { "item_id": 30735, "slot": "back", "note": "Ancient Spellcloak of the Highborne" },
+            { "item_id": 28231, "slot": "chest", "note": "Tidefury Chestpiece" },
+            { "item_id": 27510, "slot": "hands", "note": "Tidefury Gauntlets" },
+            { "item_id": 27909, "slot": "legs", "note": "Tidefury Kilt" },
+            { "item_id": 28406, "slot": "feet", "note": "Sigil-Laced Boots" },
+            { "item_id": 30667, "slot": "ring1", "note": "Ring of Unrelenting Storms" },
+            { "item_id": 29367, "slot": "ring2", "note": "Ring of Cryptic Dreams" },
+            { "item_id": 29179, "slot": "trinket1", "note": "Xi'ri's Gift" },
+            { "item_id": 30910, "slot": "mainhand", "note": "Tempest of Chaos" },
+            { "item_id": 31292, "slot": "shield", "note": "Crystal Pulse Shield" }
+          ]
+        },
+        "enhancement": {
+          "gear": [
+            { "item_id": 28275, "slot": "head", "note": "Beast Lord Helm" },
+            { "item_id": 27779, "slot": "neck", "note": "Bone Chain Necklace" },
+            { "item_id": 27801, "slot": "shoulder", "note": "Beast Lord Mantle" },
+            { "item_id": 27878, "slot": "back", "note": "Auchenai Death Shroud" },
+            { "item_id": 29519, "slot": "chest", "note": "Netherstrike Breastplate" },
+            { "item_id": 29521, "slot": "wrist", "note": "Netherstrike Bracers" },
+            { "item_id": 29509, "slot": "hands", "note": "Windstrike Gloves" },
+            { "item_id": 29520, "slot": "waist", "note": "Netherstrike Belt" },
+            { "item_id": 27874, "slot": "legs", "note": "Beast Lord Leggings" },
+            { "item_id": 28649, "slot": "ring1", "note": "Garona's Signet Ring" },
+            { "item_id": 30061, "slot": "ring2", "note": "Ancestral Ring of Conquest" },
+            { "item_id": 28041, "slot": "trinket1", "note": "Bladefist's Breadth" },
+            { "item_id": 28121, "slot": "trinket2", "note": "Icon of Unyielding Courage" },
+            { "item_id": 28524, "slot": "mainhand", "note": "Emerald Ripper" },
+            { "item_id": 29348, "slot": "offhand", "note": "The Bladefist" }
+          ]
+        }
+      }
+    },
+    "mage": {
+      "class_consumables": [],
+      "specs": {
+        "dps": {
+          "gear": [
+            { "item_id": 24266, "slot": "head", "note": "Spellstrike Hood" },
+            { "item_id": 30008, "slot": "neck", "note": "Pendant of the Lost Ages" },
+            { "item_id": 27796, "slot": "shoulder", "note": "Mana-Etched Spaulders" },
+            { "item_id": 30735, "slot": "back", "note": "Ancient Spellcloak of the Highborne" },
+            { "item_id": 28191, "slot": "chest", "note": "Mana-Etched Vestments" },
+            { "item_id": 24250, "slot": "wrist", "note": "Bracers of Havok" },
+            { "item_id": 27465, "slot": "hands", "note": "Mana-Etched Gloves" },
+            { "item_id": 30038, "slot": "waist", "note": "Belt of Blasting" },
+            { "item_id": 24262, "slot": "legs", "note": "Spellstrike Pants" },
+            { "item_id": 30035, "slot": "feet", "note": "Boots of the Long Road" },
+            { "item_id": 30667, "slot": "ring1", "note": "Ring of Unrelenting Storms" },
+            { "item_id": 29367, "slot": "ring2", "note": "Ring of Cryptic Dreams" },
+            { "item_id": 29179, "slot": "trinket1", "note": "Xi'ri's Gift" },
+            { "item_id": 23554, "slot": "mainhand", "note": "Eternium Runed Blade" },
+            { "item_id": 28386, "slot": "ranged", "note": "Nether Core's Control Rod (wand)" }
+          ]
+        }
+      }
+    },
+    "warlock": {
+      "class_consumables": [],
+      "specs": {
+        "dps": {
+          "gear": [
+            { "item_id": 24266, "slot": "head", "note": "Spellstrike Hood" },
+            { "item_id": 30008, "slot": "neck", "note": "Pendant of the Lost Ages" },
+            { "item_id": 21869, "slot": "shoulder", "note": "Frozen Shadoweave Shoulders" },
+            { "item_id": 30735, "slot": "back", "note": "Ancient Spellcloak of the Highborne" },
+            { "item_id": 21871, "slot": "chest", "note": "Frozen Shadoweave Robe" },
+            { "item_id": 24250, "slot": "wrist", "note": "Bracers of Havok" },
+            { "item_id": 27465, "slot": "hands", "note": "Mana-Etched Gloves" },
+            { "item_id": 24256, "slot": "waist", "note": "Girdle of Ruination" },
+            { "item_id": 24262, "slot": "legs", "note": "Spellstrike Pants" },
+            { "item_id": 21870, "slot": "feet", "note": "Frozen Shadoweave Boots" },
+            { "item_id": 30667, "slot": "ring1", "note": "Ring of Unrelenting Storms" },
+            { "item_id": 29367, "slot": "ring2", "note": "Ring of Cryptic Dreams" },
+            { "item_id": 29179, "slot": "trinket1", "note": "Xi'ri's Gift" },
+            { "item_id": 29185, "slot": "mainhand", "note": "Continuum Blade" },
+            { "item_id": 28386, "slot": "ranged", "note": "Nether Core's Control Rod (wand)" }
+          ]
+        }
+      }
+    },
+    "druid": {
+      "class_consumables": [],
+      "specs": {
+        "healing": {
+          "gear": [
+            { "item_id": 32090, "slot": "head", "note": "Cowl of Naaru Blessings" },
+            { "item_id": 30008, "slot": "neck", "note": "Pendant of the Lost Ages" },
+            { "item_id": 28570, "slot": "back", "note": "Shadow-Cloak of Dalaran" },
+            { "item_id": 29522, "slot": "chest", "note": "Windhawk Hauberk" },
+            { "item_id": 29523, "slot": "wrist", "note": "Windhawk Bracers" },
+            { "item_id": 34367, "slot": "hands", "note": "Hands of Eternal Light" },
+            { "item_id": 29524, "slot": "waist", "note": "Windhawk Belt" },
+            { "item_id": 24261, "slot": "legs", "note": "Whitemend Pants" },
+            { "item_id": 30035, "slot": "feet", "note": "Boots of the Long Road" },
+            { "item_id": 29367, "slot": "ring1", "note": "Ring of Cryptic Dreams" },
+            { "item_id": 30667, "slot": "ring2", "note": "Ring of Unrelenting Storms" },
+            { "item_id": 29376, "slot": "trinket1", "note": "Essence of the Martyr" },
+            { "item_id": 28257, "slot": "mainhand", "note": "Hammer of the Penitent" }
+          ]
+        },
+        "feral": {
+          "gear": [
+            { "item_id": 28224, "slot": "head", "note": "Wastewalker Helm" },
+            { "item_id": 27779, "slot": "neck", "note": "Bone Chain Necklace" },
+            { "item_id": 27797, "slot": "shoulder", "note": "Wastewalker Shoulderpads" },
+            { "item_id": 29382, "slot": "back", "note": "Blood Knight War Cloak" },
+            { "item_id": 25689, "slot": "chest", "note": "Heavy Clefthoof Vest" },
+            { "item_id": 27531, "slot": "hands", "note": "Wastewalker Gloves" },
+            { "item_id": 25690, "slot": "legs", "note": "Heavy Clefthoof Leggings" },
+            { "item_id": 25691, "slot": "feet", "note": "Heavy Clefthoof Boots" },
+            { "item_id": 30061, "slot": "ring1", "note": "Ancestral Ring of Conquest" },
+            { "item_id": 28649, "slot": "ring2", "note": "Garona's Signet Ring" },
+            { "item_id": 28041, "slot": "trinket1", "note": "Bladefist's Breadth" },
+            { "item_id": 30021, "slot": "mainhand", "note": "Wildfury Greatstaff" }
+          ]
+        },
+        "balance": {
+          "gear": [
+            { "item_id": 24266, "slot": "head", "note": "Spellstrike Hood" },
+            { "item_id": 30008, "slot": "neck", "note": "Pendant of the Lost Ages" },
+            { "item_id": 27796, "slot": "shoulder", "note": "Mana-Etched Spaulders" },
+            { "item_id": 30735, "slot": "back", "note": "Ancient Spellcloak of the Highborne" },
+            { "item_id": 28191, "slot": "chest", "note": "Mana-Etched Vestments" },
+            { "item_id": 24250, "slot": "wrist", "note": "Bracers of Havok" },
+            { "item_id": 27465, "slot": "hands", "note": "Mana-Etched Gloves" },
+            { "item_id": 24256, "slot": "waist", "note": "Girdle of Ruination" },
+            { "item_id": 24262, "slot": "legs", "note": "Spellstrike Pants" },
+            { "item_id": 28406, "slot": "feet", "note": "Sigil-Laced Boots" },
+            { "item_id": 30667, "slot": "ring1", "note": "Ring of Unrelenting Storms" },
+            { "item_id": 29367, "slot": "ring2", "note": "Ring of Cryptic Dreams" },
+            { "item_id": 29179, "slot": "trinket1", "note": "Xi'ri's Gift" },
+            { "item_id": 28188, "slot": "mainhand", "note": "Bloodfire Greatstaff" }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,38 @@
+meta {
+  name: List products
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/shop/products
+  body: none
+  auth: none
+}
+
+script:post-response {
+  // Make the first item pack the default target for the Purchase request.
+  const products = res.getBody().products || [];
+  const pack = products.find(function (p) {
+    return p.deliveryType === "item_pack";
+  });
+  if (pack) {
+    bru.setVar("productSlug", pack.slug);
+  }
+}
+
+tests {
+  test("returns the seeded catalog", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().products).to.be.an("array").that.is.not.empty;
+  });
+}
+
+docs {
+  `specsByClass` maps an AzerothCore class id to the spec slugs that have gear
+  in that pack, which is what drives the spec picker in the web UI. A class
+  absent from the map has no spec-specific gear, so `spec` may be sent as null.
+
+  Class ids: 1 warrior, 2 paladin, 3 hunter, 4 rogue, 5 priest, 6 death knight,
+  7 shaman, 8 mage, 9 warlock, 11 druid.
+}

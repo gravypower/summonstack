@@ -1,0 +1,25 @@
+meta {
+  name: Shop overview
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/admin/shop/grant
+  body: none
+  auth: none
+}
+
+tests {
+  test("returns balances and the ledger", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().balances).to.be.an("array");
+    expect(res.getBody().ledger).to.be.an("array");
+  });
+}
+
+docs {
+  Backs the Shop points page in the admin panel. The ledger is append-only —
+  corrections are new rows, never edits — so it is the authoritative record if a
+  balance is ever disputed.
+}

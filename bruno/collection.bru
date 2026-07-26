@@ -1,0 +1,17 @@
+headers {
+  Accept: application/json
+}
+
+auth {
+  mode: none
+}
+
+docs {
+  # SummonStack API
+
+  The portal authenticates with an HttpOnly `ss_session` cookie. Bruno's cookie
+  jar stores it automatically, so **run `Auth / Login` first** and every later
+  request in the same session is authenticated as that account.
+
+  Admin routes additionally require GM level 3 on the logged-in account.
+}
