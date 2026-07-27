@@ -387,6 +387,24 @@ export default function AdminRealmPage() {
       </div>
 
       <div className="card">
+        <h2>Exposing via ZeroTier or Cloudflare Tunnels</h2>
+        <p className="muted">
+          If you do not want to forward ports on your router, you can expose the stack using ZeroTier or a Cloudflare Tunnel:
+        </p>
+        <ul className="muted">
+          <li>
+            <strong>ZeroTier (Full Virtual LAN):</strong> Join a network with{" "}
+            <span className="mono">task zerotier:join NETWORK=&lt;id&gt;</span>. Set <em>Address</em> above to your host&apos;s ZeroTier IP so players on the same ZeroTier network can reach the game server and website directly.
+          </li>
+          <li>
+            <strong>Cloudflare Tunnel (Web & Downloads):</strong> Proxy HTTP/HTTPS traffic through Cloudflare with{" "}
+            <span className="mono">task cloudflare:token TOKEN=&lt;token&gt;</span>. Route your Cloudflare hostname in Cloudflare Zero Trust to <span className="mono">http://ac-webapp:3000</span> (portal) and <span className="mono">http://ac-downloads:80</span> (downloads).
+          </li>
+        </ul>
+      </div>
+
+
+      <div className="card">
         <h2>What players set</h2>
         <p className="muted">
           In their 3.3.5a client, players edit{" "}

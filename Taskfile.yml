@@ -27,7 +27,17 @@ tasks:
   up:
     desc: Start the whole stack
     cmds:
-      - docker compose up -d
+      - |
+        profiles=""
+        zt_id=$(grep -E '^ZEROTIER_NETWORK_ID=' .env 2>/dev/null | cut -d= -f2- || true)
+        cf_token=$(grep -E '^CLOUDFLARE_TUNNEL_TOKEN=' .env 2>/dev/null | cut -d= -f2- || true)
+        if [ -n "$zt_id" ]; then
+          profiles="$profiles --profile zerotier"
+        fi
+        if [ -n "$cf_token" ]; then
+          profiles="$profiles --profile cloudflare"
+        fi
+        docker compose $profiles up -d
       - task: ps
 
   down:
@@ -253,7 +263,116 @@ tasks:
           echo "  client.zip mounted  -> MISSING (check CLIENT_ZIP_PATH in .env)"
         fi
 
+  # ── Network Tunnels ──────────────────────────────────────────────────────
+  zerotier:up:
+    desc: Start the ZeroTier VPN overlay container
+    cmds:
+      - |
+        zt_id=$(grep -E '^ZEROTIER_NETWORK_ID=' .env 2>/dev/null | cut -d= -f2- || true)
+        if [ -z "$zt_id" ]; then
+          echo "ZEROTIER_NETWORK_ID is not configured in .env." >&2
+          echo "To configure and start ZeroTier, run: task zerotier:join NETWORK=<id>" >&2
+          exit 1
+        fi
+        docker compose --profile zerotier up -d ac-zerotier
+      - task: zerotier:status
+
+  zerotier:status:
+    desc: Show ZeroTier daemon info and joined networks
+    silent: true
+    cmds:
+      - |
+        if [ -z "$(docker compose ps -q ac-zerotier 2>/dev/null)" ]; then
+          echo "ac-zerotier container is not running. Start with: task zerotier:up" >&2
+          exit 1
+        fi
+        echo "── ZeroTier Node Info ──"
+        docker compose exec ac-zerotier zerotier-cli info || true
+        echo ""
+        echo "── Joined Networks ──"
+        docker compose exec ac-zerotier zerotier-cli listnetworks || true
+
+  zerotier:join:
+    desc: "Join a ZeroTier network: task zerotier:join NETWORK=8056c2e297xxxxxx"
+    requires:
+      vars: [NETWORK]
+    silent: true
+    cmds:
+      - |
+        test -f .env || { echo "No .env found. Run: task setup" >&2; exit 1; }
+        set_env() {
+          SS_KEY="$1" SS_VAL="$2" awk '
+            BEGIN { k = ENVIRON["SS_KEY"]; v = ENVIRON["SS_VAL"]; done = 0 }
+            index($0, k "=") == 1 { print k "=" v; done = 1; next }
+            { print }
+            END { if (!done) print k "=" v }
+          ' .env > .env.tmp && mv .env.tmp .env
+        }
+        set_env ZEROTIER_NETWORK_ID '{{.NETWORK}}'
+        chmod 600 .env
+        echo "Wrote ZEROTIER_NETWORK_ID to .env."
+      - docker compose --profile zerotier up -d ac-zerotier
+      - sleep 3
+      - docker compose exec ac-zerotier zerotier-cli join {{.NETWORK}}
+      - task: zerotier:status
+
+
+  zerotier:leave:
+    desc: "Leave a ZeroTier network: task zerotier:leave NETWORK=8056c2e297xxxxxx"
+    requires:
+      vars: [NETWORK]
+    silent: true
+    cmds:
+      - docker compose exec ac-zerotier zerotier-cli leave {{.NETWORK}}
+
+  cloudflare:up:
+    desc: Start the Cloudflare Tunnel container
+    cmds:
+      - |
+        cf_token=$(grep -E '^CLOUDFLARE_TUNNEL_TOKEN=' .env 2>/dev/null | cut -d= -f2- || true)
+        if [ -z "$cf_token" ]; then
+          echo "CLOUDFLARE_TUNNEL_TOKEN is not configured in .env." >&2
+          echo "To configure and start Cloudflare Tunnel, run: task cloudflare:token TOKEN=<token>" >&2
+          exit 1
+        fi
+        docker compose --profile cloudflare up -d ac-cloudflared
+      - task: cloudflare:status
+
+  cloudflare:status:
+    desc: Show Cloudflare Tunnel connection logs
+    silent: true
+    cmds:
+      - |
+        if [ -z "$(docker compose ps -q ac-cloudflared 2>/dev/null)" ]; then
+          echo "ac-cloudflared container is not running. Start with: task cloudflare:up" >&2
+          exit 1
+        fi
+        docker compose logs --tail 30 ac-cloudflared
+
+  cloudflare:token:
+    desc: "Set Cloudflare Tunnel token and start: task cloudflare:token TOKEN=eyJh..."
+    requires:
+      vars: [TOKEN]
+    silent: true
+    cmds:
+      - |
+        test -f .env || { echo "No .env found. Run: task setup" >&2; exit 1; }
+        set_env() {
+          SS_KEY="$1" SS_VAL="$2" awk '
+            BEGIN { k = ENVIRON["SS_KEY"]; v = ENVIRON["SS_VAL"]; done = 0 }
+            index($0, k "=") == 1 { print k "=" v; done = 1; next }
+            { print }
+            END { if (!done) print k "=" v }
+          ' .env > .env.tmp && mv .env.tmp .env
+        }
+        set_env CLOUDFLARE_TUNNEL_TOKEN '{{.TOKEN}}'
+        chmod 600 .env
+        echo "Wrote CLOUDFLARE_TUNNEL_TOKEN to .env."
+      - docker compose --profile cloudflare up -d ac-cloudflared
+      - task: cloudflare:status
+
   # ── Diagnostics ──────────────────────────────────────────────────────────
+
   doctor:
     desc: Check for stale images, missing .env, and container name clashes
     silent: true

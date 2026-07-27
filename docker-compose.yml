@@ -177,9 +177,50 @@ services:
     depends_on:
       - ac-webapp
 
+  # ZeroTier VPN overlay service (optional).
+  # Exposes host ports (auth 3724, world 8085, web 8080, dl 8081) to a ZeroTier network.
+  # Automatically spun up by `task up` if ZEROTIER_NETWORK_ID is configured in .env.
+  ac-zerotier:
+    container_name: ac-zerotier
+    image: zerotier/zerotier:1.14.0
+    profiles:
+      - zerotier
+      - tunnels
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    restart: on-failure
+    volumes:
+      - ac-zerotier-data:/var/lib/zerotier-one
+    environment:
+      ZEROTIER_NETWORK_ID: ${ZEROTIER_NETWORK_ID:-}
+    entrypoint: ["sh", "-c", "if [ -z \"$$ZEROTIER_NETWORK_ID\" ]; then echo 'ZEROTIER_NETWORK_ID is not configured in .env. Skipping ZeroTier.'; exit 0; fi; (sleep 3 && zerotier-cli join $$ZEROTIER_NETWORK_ID) & exec zerotier-one"]
+
+
+  # Cloudflare Tunnel service (optional).
+  # Proxies HTTP/HTTPS web portal and downloads through Cloudflare's edge network.
+  # Automatically spun up by `task up` if CLOUDFLARE_TUNNEL_TOKEN is configured in .env.
+  ac-cloudflared:
+    container_name: ac-cloudflared
+    image: cloudflare/cloudflared:2024.6.1
+    profiles:
+      - cloudflare
+      - tunnels
+    networks:
+      - ac-network
+    restart: on-failure
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    entrypoint: ["sh", "-c", "if [ -z \"$$TUNNEL_TOKEN\" ]; then echo 'CLOUDFLARE_TUNNEL_TOKEN is not configured in .env. Skipping Cloudflare Tunnel.'; exit 0; fi; exec cloudflared tunnel --no-autoupdate run"]
+
+
 volumes:
   ac-database:
   ac-client-data:
+  ac-zerotier-data:
 
 networks:
   ac-network:
+

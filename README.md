@@ -206,7 +206,45 @@ default.
 Players need a 3.3.5a client with `Data/<locale>/realmlist.wtf` set to
 `set realmlist YOUR.LAN.OR.PUBLIC.IP` — the homepage shows the exact line.
 
+## Network exposure: ZeroTier & Cloudflare Tunnels
+
+If you do not want to open/forward ports on your router, SummonStack includes built-in optional services for **ZeroTier** (virtual LAN overlay) and **Cloudflare Tunnels** (secure edge proxy).
+
+### Exposing via ZeroTier (Game Client + Web Portal)
+
+ZeroTier creates a private virtual network (LAN over WAN). All game server ports (`3724`, `8085`) and web portal ports (`8080`, `8081`) become reachable over your ZeroTier IP to anyone on the network without port forwarding.
+
+1. **Join a network:**
+   ```bash
+   task zerotier:join NETWORK=8056c2e297xxxxxx
+   ```
+2. **Authorize the node:** In your [ZeroTier Central](https://my.zerotier.com) dashboard, check the box to authorize the node.
+3. **Check status & IP:**
+   ```bash
+   task zerotier:status
+   ```
+4. **Update Realm & PUBLIC_HOST:** Set `PUBLIC_HOST=<your-zerotier-ip>` in `.env` and update the realm address in `/admin/realm` (or run MySQL UPDATE on `acore_auth.realmlist`). Players joined to your ZeroTier network set their `realmlist.wtf` to `<your-zerotier-ip>`.
+
+### Exposing via Cloudflare Tunnel (Web Portal + Downloads)
+
+Cloudflare Tunnels securely expose the web portal (`ac-webapp`) and client downloads (`ac-downloads`) through Cloudflare's edge network with automatic HTTPS.
+
+1. **Create a tunnel** in [Cloudflare Zero Trust](https://one.dash.cloudflare.com) under *Networks -> Tunnels*.
+2. **Add ingress rules in Cloudflare:**
+   - `https://wow.yourdomain.com` -> `http://ac-webapp:3000`
+   - `https://dl.yourdomain.com` -> `http://ac-downloads:80`
+3. **Start the tunnel:**
+   ```bash
+   task cloudflare:token TOKEN=eyJh...
+   ```
+4. **Check tunnel status:**
+   ```bash
+   task cloudflare:status
+   ```
+5. Set `SITE_URL=https://wow.yourdomain.com` and `DOWNLOAD_URL=https://dl.yourdomain.com` in `.env` and restart with `task up`.
+
 ## Serving the game client
+
 
 `ac-downloads` is a small nginx container that hands out the client zip so an
 ~18 GB transfer never goes through the Node app. Point `CLIENT_ZIP_PATH` at
