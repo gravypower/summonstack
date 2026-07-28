@@ -23,11 +23,11 @@ exposes: auth, account, the shop, and the admin panel.
 | Folder | What's in it |
 | ------ | ------------ |
 | `Smoke` | Login plus read-only checks, ordered and safe to run headless |
-| `Public` | Server status — the only route needing no session |
+| `Public` | Server status and summon stats — the routes needing no session |
 | `Auth` | Login, logout, invite-token check, registration |
 | `Account` | Profile, password change, download authorization |
 | `Shop` | Catalog, balance, purchase, purchase history |
-| `Admin` | Invites, account search, SOAP console, shop points |
+| `Admin` | Invites, account search, SOAP console, shop points, XP event, summon rewards |
 | `Danger Zone` | Bans, GM levels, password resets, invite revocation |
 
 **`Danger Zone` is deliberately separate.** `bru run` executes every request in
@@ -68,6 +68,9 @@ by hand:
 - **Purchases need a character.** `Shop / Purchase a pack` returns 404 until the
   logged-in account has a character on the realm, so its test only asserts the
   route answers without a server error.
+- **Summon routes double as a write.** `Public / Summon stats` and
+  `Admin / Get summon rewards` run the payout sweep that turns recorded summons
+  into shop points — nothing else schedules it. Both are idempotent.
 - **The SOAP console needs a running worldserver** and `SOAP_USER`/`SOAP_PASS`
   configured in `.env`; otherwise it returns a readable error rather than
   failing outright.

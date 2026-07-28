@@ -1,0 +1,29 @@
+# Domain: Downloads & Client Verification
+version: "3"
+
+tasks:
+  check:
+    desc: Verify the download server without transferring gigabytes
+    silent: true
+    cmds:
+      - |
+        base="$(grep -E '^DOWNLOAD_URL=' .env 2>/dev/null | cut -d= -f2- || true)"
+        if [ -z "$base" ]; then
+          host="$(grep -E '^PUBLIC_HOST=' .env 2>/dev/null | cut -d= -f2- || true)"
+          port="$(grep -E '^DOCKER_DOWNLOAD_EXTERNAL_PORT=' .env 2>/dev/null | cut -d= -f2- || true)"
+          base="http://${host:-localhost}:${port:-8081}"
+        fi
+        echo "Download server: $base"
+        printf '  healthz             -> %s (expect 200)\n' \
+          "$(curl -s -o /dev/null -w '%{http_code}' "$base/healthz")"
+        printf '  client.zip (anon)   -> %s (expect 302, login required)\n' \
+          "$(curl -s -o /dev/null -w '%{http_code}' "$base/files/client.zip")"
+        printf '  test fixture (anon) -> %s (expect 302)\n' \
+          "$(curl -s -o /dev/null -w '%{http_code}' "$base/files/test.txt")"
+        size=$(docker compose exec -T ac-downloads stat -c %s /srv/client.zip 2>/dev/null | tr -d '\r')
+        if [ -n "$size" ] && [ "$size" -gt 0 ] 2>/dev/null; then
+          printf '  client.zip mounted  -> %s bytes (%s GB)\n' \
+            "$size" "$(awk -v b="$size" 'BEGIN{printf "%.1f", b/1000000000}')"
+        else
+          echo "  client.zip mounted  -> MISSING (check CLIENT_ZIP_PATH in .env)"
+        fi

@@ -1,0 +1,39 @@
+meta {
+  name: Get summon rewards
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/admin/summons
+  body: none
+  auth: none
+}
+
+tests {
+  test("reports the reward settings", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().rewards.pointsPerSummon).to.be.a("number");
+  });
+
+  test("the worldserver is reading the settings", function () {
+    // False means the Lua script is not mounted or the worldserver is down, in
+    // which case no summon is counted at all.
+    expect(res.getBody().rewards.worldserverReading).to.equal(true);
+  });
+
+  test("nothing is stuck waiting for payout", function () {
+    // Rows settle on the next load of this route, the shop, or the homepage,
+    // so a non-zero count here means a rule refused them or a sweep failed.
+    expect(res.getBody().stats.pending).to.equal(0);
+  });
+}
+
+docs {
+  Reward settings, realm summon totals, the leaderboard, and the 50 most recent
+  summons with what each one paid.
+
+  `worldserverReading` is a heartbeat: `worldserver/lua_scripts/summons.lua`
+  stamps `seenAt` every 15 seconds. `recent[].skip_reason` says why a summon
+  paid nothing — `same_account`, `pair_cooldown`, `daily_cap` or `rewards_off`.
+}

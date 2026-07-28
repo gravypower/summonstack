@@ -1,0 +1,23 @@
+# Domain: Database Management
+version: "3"
+
+tasks:
+  default:
+    desc: "MySQL shell, e.g. task db -- acore_world (default: acore_auth)"
+    cmds:
+      - docker compose exec ac-database mysql -uroot -p{{.DB_PASS}} {{.CLI_ARGS | default "acore_auth"}}
+
+  import:
+    desc: Re-run the schema importer and report failures loudly
+    cmds:
+      - docker compose up -d --force-recreate --no-deps ac-db-import
+      - |
+        echo "Waiting for the import to finish…"
+        code=$(docker wait ac-db-import)
+        if [ "$code" != "0" ]; then
+          echo "" >&2
+          echo "Import FAILED (exit $code). Last 40 log lines:" >&2
+          docker logs --tail 40 ac-db-import >&2
+          exit 1
+        fi
+        echo "Import complete."

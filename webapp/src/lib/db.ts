@@ -58,13 +58,18 @@ const SHOP_DDL = [
      name VARCHAR(128) NOT NULL,
      description TEXT NULL,
      price INT UNSIGNED NOT NULL,
-     delivery_type ENUM('level_boost','profession_boost','item_pack') NOT NULL,
+     delivery_type ENUM('level_boost','profession_boost','item_pack','xp_lock') NOT NULL,
      payload JSON NOT NULL,
      enabled TINYINT(1) NOT NULL DEFAULT 1,
      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
      PRIMARY KEY (id),
      UNIQUE KEY uq_slug (slug)
    ) ENGINE=InnoDB`,
+  // 'xp_lock' was added after the first installs; CREATE TABLE IF NOT EXISTS
+  // above won't widen an existing enum, and re-running a MODIFY is harmless.
+  `ALTER TABLE \`__WEB_DB__\`.shop_products
+     MODIFY delivery_type
+       ENUM('level_boost','profession_boost','item_pack','xp_lock') NOT NULL`,
   // payload_snapshot freezes the resolved delivery (exact items for the
   // buyer's class/spec) so later catalog edits never change what was sold.
   `CREATE TABLE IF NOT EXISTS \`__WEB_DB__\`.shop_transactions (
@@ -110,6 +115,88 @@ const SHOP_DDL = [
      CONSTRAINT fk_pack_items_pack FOREIGN KEY (pack_id)
        REFERENCES \`__WEB_DB__\`.shop_packs (id) ON DELETE CASCADE
    ) ENGINE=InnoDB`,
+  // One row per character ever locked, read every few seconds by
+  // worldserver/lua_scripts/xp.lua. released_at IS NULL means the lock is
+  // live; releasing keeps the row so the history survives a re-lock.
+  `CREATE TABLE IF NOT EXISTS \`__WEB_DB__\`.shop_xp_locks (
+     character_guid INT UNSIGNED NOT NULL,
+     account_id INT UNSIGNED NOT NULL,
+     target_level TINYINT UNSIGNED NOT NULL,
+     locked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     released_at DATETIME NULL,
+     PRIMARY KEY (character_guid),
+     KEY idx_active (released_at)
+   ) ENGINE=InnoDB`,
+];
+
+// Summon rewards. worldserver/lua_scripts/summons.lua appends one row per
+// counted summon and reads the settings row; the webapp turns rows into
+// points. Kept apart from SHOP_DDL only because the shop predates it — both
+// are duplicated in scripts/seed-shop.mjs.
+const SUMMON_DDL = [
+  // 'summon' was added after the first installs, so the enum in the CREATE
+  // above will not have it; re-running a MODIFY is harmless.
+  `ALTER TABLE \`__WEB_DB__\`.shop_ledger
+     MODIFY reason
+       ENUM('vote','donation','admin_grant','purchase','refund','summon') NOT NULL`,
+  // Append-only log of summons, and the realm's summon counter. Names and
+  // accounts are frozen at the summon: a rename or a character transfer must
+  // not rewrite history, and awarding reads accounts from here.
+  //
+  // award_state starts 'pending'; awardPendingSummons() in lib/summons.ts
+  // moves each row to 'awarded' (with a shop_ledger row keyed on this id) or
+  // 'skipped' (with the rule that refused it). Rows written while rewards are
+  // off arrive 'skipped' so re-enabling never pays out the backlog.
+  `CREATE TABLE IF NOT EXISTS \`__WEB_DB__\`.summon_events (
+     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+     summoner_guid INT UNSIGNED NOT NULL,
+     summoner_name VARCHAR(12) NOT NULL,
+     summoner_account INT UNSIGNED NOT NULL,
+     target_guid INT UNSIGNED NOT NULL,
+     target_name VARCHAR(12) NOT NULL,
+     target_account INT UNSIGNED NOT NULL,
+     spell INT UNSIGNED NOT NULL,
+     map SMALLINT UNSIGNED NOT NULL,
+     zone SMALLINT UNSIGNED NOT NULL,
+     award_state ENUM('pending','awarded','skipped') NOT NULL DEFAULT 'pending',
+     awarded_points INT UNSIGNED NOT NULL DEFAULT 0,
+     -- The bounty on the summoned account at payout time, frozen here so a
+     -- doubled payout still explains itself after the bounty is removed.
+     bonus_pct SMALLINT UNSIGNED NOT NULL DEFAULT 100,
+     skip_reason VARCHAR(32) NULL,
+     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     PRIMARY KEY (id),
+     KEY idx_pending (award_state, id),
+     KEY idx_summoner (summoner_account, created_at),
+     KEY idx_pair (summoner_account, target_account, created_at),
+     KEY idx_leaderboard (summoner_guid)
+   ) ENGINE=InnoDB`,
+  // Bounties: summoning any character on one of these accounts pays the
+  // summoner multiplier_pct of the usual points. Keyed on the *summoned*
+  // account — being on the list is worth nothing to its own summons.
+  `CREATE TABLE IF NOT EXISTS \`__WEB_DB__\`.summon_account_bonus (
+     account_id INT UNSIGNED NOT NULL,
+     multiplier_pct SMALLINT UNSIGNED NOT NULL DEFAULT 200,
+     note VARCHAR(255) NULL,
+     created_by VARCHAR(32) NULL,
+     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     PRIMARY KEY (account_id)
+   ) ENGINE=InnoDB`,
+  // Single row, read by the Lua script every 15s. updated_at is written
+  // explicitly rather than ON UPDATE, so the script's seen_at heartbeat does
+  // not look like an admin edit.
+  `CREATE TABLE IF NOT EXISTS \`__WEB_DB__\`.summon_rewards (
+     id TINYINT UNSIGNED NOT NULL DEFAULT 1,
+     enabled TINYINT(1) NOT NULL DEFAULT 1,
+     points_per_summon SMALLINT UNSIGNED NOT NULL DEFAULT 5,
+     daily_point_cap SMALLINT UNSIGNED NOT NULL DEFAULT 100,
+     pair_cooldown_minutes SMALLINT UNSIGNED NOT NULL DEFAULT 30,
+     announce_every INT UNSIGNED NOT NULL DEFAULT 50,
+     updated_by VARCHAR(32) NULL,
+     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     seen_at DATETIME NULL,
+     PRIMARY KEY (id)
+   ) ENGINE=InnoDB`,
 ];
 
 /** Create the webapp's own database/tables on first use. */
@@ -136,10 +223,15 @@ export async function ensureWebDb(): Promise<void> {
       );
       // Shop tables. This DDL is duplicated in scripts/seed-shop.mjs, which
       // must be able to run before the webapp has served a request.
-      for (const ddl of SHOP_DDL) {
-        await pool.query(ddl.replace("__WEB_DB__", WEB_DB));
+      for (const ddl of [...SHOP_DDL, ...SUMMON_DDL]) {
+        // replaceAll, not replace: shop_pack_items names the database twice
+        // (the table and its foreign key target).
+        await pool.query(ddl.replaceAll("__WEB_DB__", WEB_DB));
       }
-      // Single row, read by worldserver/lua_scripts/joyous_journeys.lua.
+      await pool.query(
+        `INSERT IGNORE INTO \`${WEB_DB}\`.summon_rewards (id) VALUES (1)`
+      );
+      // Single row, read by worldserver/lua_scripts/xp.lua.
       // updated_at is written explicitly rather than ON UPDATE: the Lua script
       // touches seen_at every few seconds and must not look like an edit.
       await pool.query(

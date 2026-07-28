@@ -26,6 +26,7 @@ const SECONDARY_SKILLS = [129, 185, 356]; // First Aid, Cooking, Fishing
 export type Snapshot =
   | { type: "level_boost"; level: number }
   | { type: "profession_boost"; skillCap: number }
+  | { type: "xp_lock"; action: "lock" | "release"; targetLevel: number }
   | {
       type: "item_pack";
       pack: string;
@@ -39,7 +40,7 @@ interface ProductRow extends RowDataPacket {
   name: string;
   description: string | null;
   price: number;
-  delivery_type: "level_boost" | "profession_boost" | "item_pack";
+  delivery_type: "level_boost" | "profession_boost" | "item_pack" | "xp_lock";
   payload: unknown;
 }
 
@@ -108,6 +109,37 @@ export async function listCharacters(accountId: number): Promise<CharacterRow[]>
     [accountId]
   );
   return rows;
+}
+
+/**
+ * The level a character's XP is held at, or null if it still gains XP.
+ * `worldserver/lua_scripts/xp.lua` reads the same rows every few seconds.
+ */
+export async function getXpLock(guid: number): Promise<number | null> {
+  await ensureWebDb();
+  const [rows] = await getPool().query<RowDataPacket[]>(
+    `SELECT target_level FROM \`${WEB_DB}\`.shop_xp_locks
+      WHERE character_guid = ? AND released_at IS NULL`,
+    [guid]
+  );
+  return rows[0] ? Number(rows[0].target_level) : null;
+}
+
+/** Every live lock on an account's characters, keyed by guid, for the UI. */
+export async function listXpLocks(
+  accountId: number
+): Promise<Record<number, number>> {
+  await ensureWebDb();
+  const [rows] = await getPool().query<RowDataPacket[]>(
+    `SELECT l.character_guid, l.target_level
+       FROM \`${WEB_DB}\`.shop_xp_locks l
+       JOIN \`${CHARS_DB}\`.characters c ON c.guid = l.character_guid
+      WHERE c.account = ? AND l.released_at IS NULL`,
+    [accountId]
+  );
+  const out: Record<number, number> = {};
+  for (const r of rows) out[Number(r.character_guid)] = Number(r.target_level);
+  return out;
 }
 
 export async function listProducts(): Promise<ProductRow[]> {
@@ -392,7 +424,51 @@ async function resolveSnapshot(
     if (character.level >= level) {
       throw new HttpError(409, `${character.name} is already level ${character.level}.`);
     }
+    // A boost sets the level outright, so it would walk straight through an
+    // XP lock — the Lua hook only ever sees experience. Refuse instead of
+    // silently undoing something the same player paid for.
+    const lockedAt = await getXpLock(character.guid);
+    if (lockedAt !== null) {
+      throw new HttpError(
+        409,
+        `${character.name}'s experience is locked at level ${lockedAt}. ` +
+          "Buy the unlock first if you want to level past it."
+      );
+    }
     return { type: "level_boost", level };
+  }
+
+  if (product.delivery_type === "xp_lock") {
+    const action = payload.action === "release" ? "release" : "lock";
+    const lockedAt = await getXpLock(character.guid);
+
+    if (action === "release") {
+      if (lockedAt === null) {
+        throw new HttpError(409, `${character.name}'s experience is not locked.`);
+      }
+      return { type: "xp_lock", action, targetLevel: lockedAt };
+    }
+
+    if (lockedAt !== null) {
+      throw new HttpError(
+        409,
+        `${character.name}'s experience is already locked at level ${lockedAt}.`
+      );
+    }
+    // A null level means "hold them where they stand"; a number makes the
+    // product a bracket lock that can be bought early and bites on arrival.
+    const target =
+      payload.level == null ? character.level : Number(payload.level);
+    if (!Number.isInteger(target) || target < 1 || target > 80) {
+      throw new HttpError(500, "Product is misconfigured (level).");
+    }
+    if (character.level > target) {
+      throw new HttpError(
+        409,
+        `${character.name} is already level ${character.level}, past this lock's level ${target}.`
+      );
+    }
+    return { type: "xp_lock", action, targetLevel: target };
   }
 
   if (product.delivery_type === "profession_boost") {
@@ -521,6 +597,8 @@ export async function deliver(txnId: number): Promise<void> {
       }
     } else if (snapshot.type === "profession_boost") {
       await deliverProfessionBoost(txn.character_guid, snapshot.skillCap);
+    } else if (snapshot.type === "xp_lock") {
+      await deliverXpLock(txn, snapshot);
     }
 
     await setStatus(txnId, "delivering", "delivered", null);
@@ -555,6 +633,58 @@ async function getCurrentCharacterName(guid: number): Promise<string> {
     throw new DeliveryError("fault", "Character no longer exists or was renamed oddly.");
   }
   return name;
+}
+
+/**
+ * Delivery is a row in the web DB — no SOAP, so there is no unreachable or
+ * partial case here: it either commits or it throws cleanly and refunds.
+ * The worldserver picks the change up on its next poll (5s).
+ */
+async function deliverXpLock(
+  txn: TxnRow,
+  snapshot: Extract<Snapshot, { type: "xp_lock" }>
+): Promise<void> {
+  const pool = getPool();
+
+  if (snapshot.action === "release") {
+    const [res] = await pool.query<ResultSetHeader>(
+      `UPDATE \`${WEB_DB}\`.shop_xp_locks
+          SET released_at = NOW()
+        WHERE character_guid = ? AND released_at IS NULL`,
+      [txn.character_guid]
+    );
+    // Guarded, so two releases in flight can only pay for one.
+    if (res.affectedRows === 0) {
+      throw new DeliveryError("fault", "That character's experience is not locked.");
+    }
+    return;
+  }
+
+  // The row is kept after a release, so re-locking updates it in place.
+  try {
+    await pool.query(
+      `INSERT INTO \`${WEB_DB}\`.shop_xp_locks
+         (character_guid, account_id, target_level)
+       VALUES (?, ?, ?)`,
+      [txn.character_guid, txn.account_id, snapshot.targetLevel]
+    );
+  } catch (err) {
+    if ((err as { code?: string }).code !== "ER_DUP_ENTRY") throw err;
+    const [res] = await pool.query<ResultSetHeader>(
+      `UPDATE \`${WEB_DB}\`.shop_xp_locks
+          SET account_id = ?, target_level = ?, locked_at = NOW(), released_at = NULL
+        WHERE character_guid = ? AND released_at IS NOT NULL`,
+      [txn.account_id, snapshot.targetLevel, txn.character_guid]
+    );
+    // The released_at guard means a concurrent second purchase cannot charge
+    // twice for the same lock.
+    if (res.affectedRows === 0) {
+      throw new DeliveryError(
+        "fault",
+        "That character's experience is already locked."
+      );
+    }
+  }
 }
 
 async function deliverProfessionBoost(guid: number, cap: number): Promise<void> {

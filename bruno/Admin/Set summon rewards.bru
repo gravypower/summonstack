@@ -1,0 +1,47 @@
+meta {
+  name: Set summon rewards
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/admin/summons
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "enabled": true,
+    "pointsPerSummon": 5,
+    "dailyPointCap": 100,
+    "pairCooldownMinutes": 30,
+    "announceEvery": 50
+  }
+}
+
+tests {
+  test("saves the settings", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().rewards.pointsPerSummon).to.equal(5);
+  });
+}
+
+docs {
+  What a summon is worth, and the rules that stop it being farmed. Fields left
+  out keep their current value.
+
+  - `pointsPerSummon` — 0 counts summons without paying for them.
+  - `dailyPointCap` — most points one account can earn from summons in 24h;
+    0 removes the cap. Must be at least `pointsPerSummon`.
+  - `pairCooldownMinutes` — how long before the same two accounts pay each
+    other again; 0 always pays.
+  - `announceEvery` — announce every Nth realm summon in game; 0 stays quiet.
+
+  Summoning an alt on your own account never pays, and that is not tunable.
+  Turning `enabled` off keeps the counter running: those summons are recorded
+  as unpaid and are never paid retroactively when you turn it back on.
+
+  This body is the shipped default, so running the collection leaves the realm
+  as it was.
+}

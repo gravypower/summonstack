@@ -25,6 +25,7 @@ const REASON_PILL: Record<string, string> = {
   donation: "green",
   purchase: "gray",
   refund: "red",
+  summon: "green",
 };
 
 export default function AdminShopPage() {

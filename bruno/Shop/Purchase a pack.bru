@@ -44,7 +44,10 @@ docs {
   - `402` — not enough points.
   - `404` — the guid is not on this account, or the product slug is unknown.
   - `409` — ineligible: already max level, below the pack's minimum level, no
-    professions to boost, or the character is online for a profession boost.
+    professions to boost, the character is online for a profession boost, or
+    an experience lock is in the way (a locked character cannot take a level
+    boost, cannot be locked twice, and cannot be unlocked when it is not
+    locked).
   - `400` — a spec is required for this class and pack but was missing.
 
   To replay a purchase idempotently, disable the pre-request script so the same

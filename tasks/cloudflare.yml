@@ -1,0 +1,49 @@
+# Domain: Cloudflare Tunnel Management
+version: "3"
+
+tasks:
+  up:
+    desc: Start the Cloudflare Tunnel container
+    cmds:
+      - |
+        cf_token=$(grep -E '^CLOUDFLARE_TUNNEL_TOKEN=' .env 2>/dev/null | cut -d= -f2- || true)
+        if [ -z "$cf_token" ]; then
+          echo "CLOUDFLARE_TUNNEL_TOKEN is not configured in .env." >&2
+          echo "To configure and start Cloudflare Tunnel, run: task cloudflare:token TOKEN=<token>" >&2
+          exit 1
+        fi
+        docker compose --profile cloudflare up -d ac-cloudflared
+      - task: status
+
+  status:
+    desc: Show Cloudflare Tunnel connection logs
+    silent: true
+    cmds:
+      - |
+        if [ -z "$(docker compose ps -q ac-cloudflared 2>/dev/null)" ]; then
+          echo "ac-cloudflared container is not running. Start with: task cloudflare:up" >&2
+          exit 1
+        fi
+        docker compose logs --tail 30 ac-cloudflared
+
+  token:
+    desc: "Set Cloudflare Tunnel token and start: task cloudflare:token TOKEN=eyJh..."
+    requires:
+      vars: [TOKEN]
+    silent: true
+    cmds:
+      - |
+        test -f .env || { echo "No .env found. Run: task setup" >&2; exit 1; }
+        set_env() {
+          SS_KEY="$1" SS_VAL="$2" awk '
+            BEGIN { k = ENVIRON["SS_KEY"]; v = ENVIRON["SS_VAL"]; done = 0 }
+            index($0, k "=") == 1 { print k "=" v; done = 1; next }
+            { print }
+            END { if (!done) print k "=" v }
+          ' .env > .env.tmp && mv .env.tmp .env
+        }
+        set_env CLOUDFLARE_TUNNEL_TOKEN '{{.TOKEN}}'
+        chmod 600 .env
+        echo "Wrote CLOUDFLARE_TUNNEL_TOKEN to .env."
+      - docker compose --profile cloudflare up -d ac-cloudflared
+      - task: status

@@ -16,6 +16,29 @@ vars:
       echo "${pw:-password}"
   ACORE_DBS: acore_auth acore_world acore_characters
 
+includes:
+  admin:
+    taskfile: ./tasks/admin.yml
+    dir: .
+  db:
+    taskfile: ./tasks/db.yml
+    dir: .
+  shop:
+    taskfile: ./tasks/shop.yml
+    dir: .
+  client:
+    taskfile: ./tasks/client.yml
+    dir: .
+  zerotier:
+    taskfile: ./tasks/zerotier.yml
+    dir: .
+  cloudflare:
+    taskfile: ./tasks/cloudflare.yml
+    dir: .
+  realm:
+    taskfile: ./tasks/realm.yml
+    dir: .
+
 tasks:
   default:
     desc: List available tasks
@@ -23,19 +46,23 @@ tasks:
       - task --list
     silent: true
 
-  # ── Lifecycle ────────────────────────────────────────────────────────────
+  # ── Core Lifecycle ────────────────────────────────────────────────────────
   up:
-    desc: Start the whole stack
+    desc: Start the whole stack (playerbots realm too when PLAYERBOTS_MODE=1)
     cmds:
       - |
         profiles=""
         zt_id=$(grep -E '^ZEROTIER_NETWORK_ID=' .env 2>/dev/null | cut -d= -f2- || true)
         cf_token=$(grep -E '^CLOUDFLARE_TUNNEL_TOKEN=' .env 2>/dev/null | cut -d= -f2- || true)
+        pb_mode=$(grep -E '^PLAYERBOTS_MODE=' .env 2>/dev/null | cut -d= -f2- || true)
         if [ -n "$zt_id" ]; then
           profiles="$profiles --profile zerotier"
         fi
         if [ -n "$cf_token" ]; then
           profiles="$profiles --profile cloudflare"
+        fi
+        if [ -n "$pb_mode" ] && [ "$pb_mode" != "0" ]; then
+          profiles="$profiles --profile playerbots"
         fi
         docker compose $profiles up -d
       - task: ps
@@ -56,9 +83,9 @@ tasks:
       - docker compose ps -a
 
   logs:
-    desc: "Follow logs, e.g. task logs -- ac-worldserver"
+    desc: "Follow logs from all running containers (or specific service, e.g. task logs -- ac-worldserver)"
     cmds:
-      - docker compose logs -f --tail 100 {{.CLI_ARGS}}
+      - bash -c 'trap "exit 0" INT; docker compose --profile "*" logs -f --tail 100 {{.CLI_ARGS}}'
 
   pull:
     desc: Refresh all images (guards against stale cached :master tags)
@@ -68,311 +95,38 @@ tasks:
   build:
     desc: Rebuild the webapp image and restart it
     cmds:
-      - docker compose build ac-webapp
+      - BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build ac-webapp
       - docker compose up -d --no-deps ac-webapp
 
-  # ── Accounts ─────────────────────────────────────────────────────────────
+  world:
+    desc: Attach to the worldserver console (detach with Ctrl-P Ctrl-Q)
+    cmds:
+      - task: realm:world
+        vars: {REALM: "1"}
+
+  # ── Account & Admin Aliases ──────────────────────────────────────────────
   admin:
     desc: "Create/promote a GM3 admin (wires the console on first setup; SOAP=1 repoints it)"
     requires:
       vars: [USER, PASS]
-    silent: true
     cmds:
-      - docker compose exec ac-webapp node scripts/create-admin.mjs {{.USER}} {{.PASS}}
-      - |
-        # Wire the admin console automatically the first time, since a fresh
-        # install always wants it. SOAP=1 is only needed to repoint a console
-        # that is already configured, so creating a second admin cannot
-        # silently steal the console from the first.
-        cur_user=$(grep -E '^SOAP_USER=' .env 2>/dev/null | cut -d= -f2- || true)
-        cur_pass=$(grep -E '^SOAP_PASS=' .env 2>/dev/null | cut -d= -f2- || true)
-        if [ ! -f .env ]; then
-          echo ""
-          echo "No .env yet, so the admin console was not wired. Run:"
-          echo "  task setup && task soap USER={{.USER}} PASS=<the password>"
-        elif [ -n "{{.SOAP}}" ] || [ -z "$cur_pass" ]; then
-          echo ""
-          task soap USER='{{.USER}}' PASS='{{.PASS}}'
-        else
-          echo ""
-          echo "Admin console is already wired to '${cur_user}' — left alone."
-          echo "To repoint it at {{.USER}}, re-run with SOAP=1."
-        fi
+      - task: admin:default
+        vars: {USER: "{{.USER}}", PASS: "{{.PASS}}", SOAP: "{{.SOAP}}"}
 
   soap:
     desc: "Point the admin console at an account: task soap USER=myadmin PASS=pw"
     requires:
       vars: [USER, PASS]
-    silent: true
     cmds:
-      - |
-        test -f .env || { echo "No .env found. Run: task setup" >&2; exit 1; }
-        # Values go through the environment rather than sed/awk -v so that
-        # passwords containing &, |, \ or / cannot corrupt the file.
-        set_env() {
-          SS_KEY="$1" SS_VAL="$2" awk '
-            BEGIN { k = ENVIRON["SS_KEY"]; v = ENVIRON["SS_VAL"]; done = 0 }
-            index($0, k "=") == 1 { print k "=" v; done = 1; next }
-            { print }
-            END { if (!done) print k "=" v }
-          ' .env > .env.tmp && mv .env.tmp .env
-        }
-        set_env SOAP_USER '{{.USER}}'
-        set_env SOAP_PASS '{{.PASS}}'
-        chmod 600 .env
-        echo "Wrote SOAP_USER/SOAP_PASS to .env (mode 600)."
-      - docker compose up -d --no-deps ac-webapp
-      - task: soap:check
+      - task: admin:soap
+        vars: {USER: "{{.USER}}", PASS: "{{.PASS}}"}
 
   soap:check:
     desc: Verify the admin console credentials against the worldserver
-    silent: true
     cmds:
-      - |
-        user=$(grep -E '^SOAP_USER=' .env 2>/dev/null | cut -d= -f2- || true)
-        pass=$(grep -E '^SOAP_PASS=' .env 2>/dev/null | cut -d= -f2- || true)
-        port=$(grep -E '^DOCKER_SOAP_EXTERNAL_PORT=' .env 2>/dev/null | cut -d= -f2- || true)
-        port="${port:-7878}"
-        if [ -z "$user" ] || [ -z "$pass" ]; then
-          echo "SOAP_USER/SOAP_PASS not set in .env. Run: task soap USER=x PASS=y" >&2
-          exit 1
-        fi
-        body='<?xml version="1.0" encoding="utf-8"?>
-        <SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="urn:AC">
-          <SOAP-ENV:Body><ns1:executeCommand><command>server info</command></ns1:executeCommand></SOAP-ENV:Body>
-        </SOAP-ENV:Envelope>'
-        # gSOAP returns its 401 in the HTTP status only — the body is a SOAP
-        # Fault mentioning neither "401" nor "Unauthorized" — so the status
-        # code has to be captured separately or auth failures look like the
-        # worldserver being down.
-        # `|| true` because a refused connection exits 7, which would abort
-        # the task under errexit before the diagnostics below can run. curl
-        # still emits the write-out (as 000) in that case.
-        raw=$(curl -s -m 10 -u "$user:$pass" -H 'Content-Type: text/xml' \
-               -d "$body" -w '__HTTP__%{http_code}' "http://127.0.0.1:${port}/" 2>/dev/null || true)
-        code=${raw##*__HTTP__}
-        out=${raw%__HTTP__*}
-        case "$code" in
-          000|"")
-            echo "Could not reach the worldserver SOAP API on 127.0.0.1:${port}." >&2
-            echo "Is ac-worldserver up? Check with: task ps" >&2
-            exit 1
-            ;;
-          401|403)
-            echo "SOAP auth REJECTED for '$user' (HTTP $code)." >&2
-            echo "Check the password, and that the account has GM level 3:" >&2
-            echo "  task admin USER=$user PASS=<pw>" >&2
-            exit 1
-            ;;
-        esac
-        case "$out" in
-          *"<result>"*)
-            echo "SOAP OK as '$user'. Worldserver replied:"
-            # Range-match so the XML declaration outside <result> is dropped.
-            printf '%s\n' "$out" \
-              | sed -n '/<result>/,/<\/result>/p' \
-              | sed -e 's|.*<result>||' -e 's|</result>.*||' -e 's/&#xD;//g' \
-              | sed -e '/^[[:space:]]*$/d' -e 's/^/  /' | head -6
-            ;;
-          *)
-            echo "No usable reply from the worldserver SOAP API on port $port (HTTP ${code:-none})." >&2
-            echo "Is ac-worldserver running? Check: task logs -- ac-worldserver" >&2
-            exit 1
-            ;;
-        esac
+      - task: admin:soap-check
 
-  # ── Shop ─────────────────────────────────────────────────────────────────
-  shop:seed:
-    desc: Seed/refresh the shop catalog and starter packs (validates item ids)
-    cmds:
-      - docker compose exec ac-webapp node scripts/seed-shop.mjs
-
-  shop:grant:
-    desc: "Grant shop points directly: task shop:grant USER=name AMOUNT=500"
-    requires:
-      vars: [USER, AMOUNT]
-    silent: true
-    cmds:
-      - |
-        docker compose exec -T ac-database mysql -uroot -p{{.DB_PASS}} -e "
-          SET @acct = (SELECT id FROM acore_auth.account WHERE username = UPPER('{{.USER}}'));
-          SELECT IF(@acct IS NULL, 'No such account', 'ok') AS check_account;
-          INSERT INTO summonstack_web.shop_balances (account_id, balance)
-            SELECT @acct, {{.AMOUNT}} WHERE @acct IS NOT NULL
-            ON DUPLICATE KEY UPDATE balance = balance + {{.AMOUNT}};
-          INSERT INTO summonstack_web.shop_ledger (account_id, delta, reason, note)
-            SELECT @acct, {{.AMOUNT}}, 'admin_grant', 'task shop:grant' WHERE @acct IS NOT NULL;
-          SELECT balance FROM summonstack_web.shop_balances WHERE account_id = @acct;
-        " 2>/dev/null
-
-  # ── Database ─────────────────────────────────────────────────────────────
-  db:
-    desc: "MySQL shell, e.g. task db -- acore_world (default: acore_auth)"
-    cmds:
-      - docker compose exec ac-database mysql -uroot -p{{.DB_PASS}} {{.CLI_ARGS | default "acore_auth"}}
-
-  db:import:
-    desc: Re-run the schema importer and report failures loudly
-    cmds:
-      - docker compose up -d --force-recreate --no-deps ac-db-import
-      - |
-        echo "Waiting for the import to finish…"
-        code=$(docker wait ac-db-import)
-        if [ "$code" != "0" ]; then
-          echo "" >&2
-          echo "Import FAILED (exit $code). Last 40 log lines:" >&2
-          docker logs --tail 40 ac-db-import >&2
-          exit 1
-        fi
-        echo "Import complete."
-
-  world:
-    desc: Attach to the worldserver console (detach with Ctrl-P Ctrl-Q)
-    cmds:
-      - docker attach ac-worldserver
-
-  # ── Downloads ────────────────────────────────────────────────────────────
-  client:check:
-    desc: Verify the download server without transferring gigabytes
-    silent: true
-    cmds:
-      - |
-        # Mirrors the compose default: an explicit DOWNLOAD_URL wins, else
-        # PUBLIC_HOST on the published download port.
-        base="$(grep -E '^DOWNLOAD_URL=' .env 2>/dev/null | cut -d= -f2- || true)"
-        if [ -z "$base" ]; then
-          host="$(grep -E '^PUBLIC_HOST=' .env 2>/dev/null | cut -d= -f2- || true)"
-          port="$(grep -E '^DOCKER_DOWNLOAD_EXTERNAL_PORT=' .env 2>/dev/null | cut -d= -f2- || true)"
-          base="http://${host:-localhost}:${port:-8081}"
-        fi
-        echo "Download server: $base"
-        printf '  healthz             -> %s (expect 200)\n' \
-          "$(curl -s -o /dev/null -w '%{http_code}' "$base/healthz")"
-        # Anonymous, so this only ever sees the redirect — never the file.
-        printf '  client.zip (anon)   -> %s (expect 302, login required)\n' \
-          "$(curl -s -o /dev/null -w '%{http_code}' "$base/files/client.zip")"
-        printf '  test fixture (anon) -> %s (expect 302)\n' \
-          "$(curl -s -o /dev/null -w '%{http_code}' "$base/files/test.txt")"
-        # Read the size off the mount instead of over HTTP: an authenticated
-        # GET would stream the whole ~18 GB file just to read one header.
-        size=$(docker compose exec -T ac-downloads stat -c %s /srv/client.zip 2>/dev/null | tr -d '\r')
-        if [ -n "$size" ] && [ "$size" -gt 0 ] 2>/dev/null; then
-          printf '  client.zip mounted  -> %s bytes (%s GB)\n' \
-            "$size" "$(awk -v b="$size" 'BEGIN{printf "%.1f", b/1000000000}')"
-        else
-          echo "  client.zip mounted  -> MISSING (check CLIENT_ZIP_PATH in .env)"
-        fi
-
-  # ── Network Tunnels ──────────────────────────────────────────────────────
-  zerotier:up:
-    desc: Start the ZeroTier VPN overlay container
-    cmds:
-      - |
-        zt_id=$(grep -E '^ZEROTIER_NETWORK_ID=' .env 2>/dev/null | cut -d= -f2- || true)
-        if [ -z "$zt_id" ]; then
-          echo "ZEROTIER_NETWORK_ID is not configured in .env." >&2
-          echo "To configure and start ZeroTier, run: task zerotier:join NETWORK=<id>" >&2
-          exit 1
-        fi
-        docker compose --profile zerotier up -d ac-zerotier
-      - task: zerotier:status
-
-  zerotier:status:
-    desc: Show ZeroTier daemon info and joined networks
-    silent: true
-    cmds:
-      - |
-        if [ -z "$(docker compose ps -q ac-zerotier 2>/dev/null)" ]; then
-          echo "ac-zerotier container is not running. Start with: task zerotier:up" >&2
-          exit 1
-        fi
-        echo "── ZeroTier Node Info ──"
-        docker compose exec ac-zerotier zerotier-cli info || true
-        echo ""
-        echo "── Joined Networks ──"
-        docker compose exec ac-zerotier zerotier-cli listnetworks || true
-
-  zerotier:join:
-    desc: "Join a ZeroTier network: task zerotier:join NETWORK=8056c2e297xxxxxx"
-    requires:
-      vars: [NETWORK]
-    silent: true
-    cmds:
-      - |
-        test -f .env || { echo "No .env found. Run: task setup" >&2; exit 1; }
-        set_env() {
-          SS_KEY="$1" SS_VAL="$2" awk '
-            BEGIN { k = ENVIRON["SS_KEY"]; v = ENVIRON["SS_VAL"]; done = 0 }
-            index($0, k "=") == 1 { print k "=" v; done = 1; next }
-            { print }
-            END { if (!done) print k "=" v }
-          ' .env > .env.tmp && mv .env.tmp .env
-        }
-        set_env ZEROTIER_NETWORK_ID '{{.NETWORK}}'
-        chmod 600 .env
-        echo "Wrote ZEROTIER_NETWORK_ID to .env."
-      - docker compose --profile zerotier up -d ac-zerotier
-      - sleep 3
-      - docker compose exec ac-zerotier zerotier-cli join {{.NETWORK}}
-      - task: zerotier:status
-
-
-  zerotier:leave:
-    desc: "Leave a ZeroTier network: task zerotier:leave NETWORK=8056c2e297xxxxxx"
-    requires:
-      vars: [NETWORK]
-    silent: true
-    cmds:
-      - docker compose exec ac-zerotier zerotier-cli leave {{.NETWORK}}
-
-  cloudflare:up:
-    desc: Start the Cloudflare Tunnel container
-    cmds:
-      - |
-        cf_token=$(grep -E '^CLOUDFLARE_TUNNEL_TOKEN=' .env 2>/dev/null | cut -d= -f2- || true)
-        if [ -z "$cf_token" ]; then
-          echo "CLOUDFLARE_TUNNEL_TOKEN is not configured in .env." >&2
-          echo "To configure and start Cloudflare Tunnel, run: task cloudflare:token TOKEN=<token>" >&2
-          exit 1
-        fi
-        docker compose --profile cloudflare up -d ac-cloudflared
-      - task: cloudflare:status
-
-  cloudflare:status:
-    desc: Show Cloudflare Tunnel connection logs
-    silent: true
-    cmds:
-      - |
-        if [ -z "$(docker compose ps -q ac-cloudflared 2>/dev/null)" ]; then
-          echo "ac-cloudflared container is not running. Start with: task cloudflare:up" >&2
-          exit 1
-        fi
-        docker compose logs --tail 30 ac-cloudflared
-
-  cloudflare:token:
-    desc: "Set Cloudflare Tunnel token and start: task cloudflare:token TOKEN=eyJh..."
-    requires:
-      vars: [TOKEN]
-    silent: true
-    cmds:
-      - |
-        test -f .env || { echo "No .env found. Run: task setup" >&2; exit 1; }
-        set_env() {
-          SS_KEY="$1" SS_VAL="$2" awk '
-            BEGIN { k = ENVIRON["SS_KEY"]; v = ENVIRON["SS_VAL"]; done = 0 }
-            index($0, k "=") == 1 { print k "=" v; done = 1; next }
-            { print }
-            END { if (!done) print k "=" v }
-          ' .env > .env.tmp && mv .env.tmp .env
-        }
-        set_env CLOUDFLARE_TUNNEL_TOKEN '{{.TOKEN}}'
-        chmod 600 .env
-        echo "Wrote CLOUDFLARE_TUNNEL_TOKEN to .env."
-      - docker compose --profile cloudflare up -d ac-cloudflared
-      - task: cloudflare:status
-
-  # ── Diagnostics ──────────────────────────────────────────────────────────
-
+  # ── Diagnostics & Setup ──────────────────────────────────────────────────
   doctor:
     desc: Check for stale images, missing .env, and container name clashes
     silent: true
@@ -418,8 +172,6 @@ tasks:
       - test -f .env
     cmds:
       - cp .env.example .env
-      # The DB password must match what MySQL was initialised with; an env var
-      # cannot change an existing datadir's root password.
       - |
         existing_pw="password"
         sed -i "s|^DOCKER_DB_ROOT_PASSWORD=.*|DOCKER_DB_ROOT_PASSWORD=${existing_pw}|" .env

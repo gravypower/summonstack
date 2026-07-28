@@ -1,10 +1,18 @@
 --[[
-  Joyous Journeys — a server-wide XP event, switched on from the admin panel.
+  XP rules — the server-wide XP event (Joyous Journeys) and the per-character
+  XP locks bought from the shop.
 
-  The webapp owns the state: one row in `summonstack_web`.xp_event. This script
-  only reads it. Turning the event off in the panel turns it off in the world
-  within POLL_SECONDS whether or not anyone touches this file, and the
-  worldserver never has to restart.
+  Both live in one file on purpose: they share PLAYER_EVENT_ON_GIVE_XP. Two
+  scripts registering that hook would both run and the engine keeps whichever
+  handler returned last, so a running event could hand XP back to a locked
+  character. One hook, one decision — a lock wins, otherwise the event
+  multiplier applies.
+
+  The webapp owns both pieces of state: `summonstack_web`.xp_event (one row)
+  and `summonstack_web`.shop_xp_locks (one row per character ever locked).
+  This script only reads them, so a change in the panel or a purchase in the
+  shop lands in the world within the poll interval, and the worldserver never
+  has to restart.
 
   The worldserver's Lua engine (ALE) watches this directory and reloads on
   change, so edits here land within seconds; `.reload ale` from the admin
@@ -24,6 +32,11 @@ local WEB_DB = "summonstack_web"
 -- hitting Save and players seeing the change.
 local POLL_SECONDS = 15
 
+-- Locks are re-read more often than the event: the gap between paying for a
+-- lock and it taking hold is XP the buyer did not want. Logins read their own
+-- lock directly, so this only has to catch purchases made mid-session.
+local LOCK_POLL_SECONDS = 5
+
 -- Re-applied on every poll while the event runs, so the spell's own duration
 -- does not matter.
 local AURA_DURATION_MS = 2 * 60 * 60 * 1000
@@ -36,28 +49,76 @@ local state = {
   multiplier = 1,
   aura = 0,
   name = "Joyous Journeys",
-  -- The table is created lazily by the webapp, which may not have served a
-  -- request yet. Querying it before then logs an SQL error every poll.
-  tableReady = false,
   -- A reload starts from active = false. Without this the first poll of a
   -- running event would announce it a second time.
   primed = false,
 }
 
+-- guid → the level that character is held at. Absent = XP counts as normal.
+local locks = {}
+
+-- The tables are created lazily by the webapp, which may not have served a
+-- request yet. Querying one before then logs an SQL error every poll.
+local tablesReady = {}
+
 local function percent()
   return math.floor((state.multiplier - 1) * 100 + 0.5)
 end
 
-local function tableReady()
-  if state.tableReady then
+local function tableReady(name)
+  if tablesReady[name] then
     return true
   end
   local query = WorldDBQuery(string.format(
     "SELECT COUNT(*) FROM information_schema.TABLES " ..
-    "WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME = 'xp_event'", WEB_DB))
-  state.tableReady = query ~= nil and query:GetUInt32(0) > 0
-  return state.tableReady
+    "WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s'", WEB_DB, name))
+  tablesReady[name] = query ~= nil and query:GetUInt32(0) > 0
+  return tablesReady[name]
 end
+
+-- ── XP locks ───────────────────────────────────────────────────────────────
+
+--- The level a character is being held at, or nil if its XP still counts.
+local function lockedAt(player)
+  local target = locks[player:GetGUIDLow()]
+  -- A lock may be bought below its target level and takes hold on arrival, so
+  -- a character under it still levels normally.
+  if target and player:GetLevel() >= target then
+    return target
+  end
+  return nil
+end
+
+local function refreshLocks()
+  if not tableReady("shop_xp_locks") then
+    return
+  end
+  local query = WorldDBQuery(string.format(
+    "SELECT character_guid, target_level FROM `%s`.shop_xp_locks " ..
+    "WHERE released_at IS NULL", WEB_DB))
+  -- Rebuilt rather than merged: a released lock simply stops being returned.
+  local fresh = {}
+  if query then
+    repeat
+      fresh[query:GetUInt32(0)] = query:GetUInt32(1)
+    until not query:NextRow()
+  end
+  locks = fresh
+end
+
+--- Read one character's lock, so a login never races the poll above.
+local function refreshLockFor(player)
+  if not tableReady("shop_xp_locks") then
+    return
+  end
+  local guid = player:GetGUIDLow()
+  local query = WorldDBQuery(string.format(
+    "SELECT target_level FROM `%s`.shop_xp_locks " ..
+    "WHERE character_guid = %u AND released_at IS NULL", WEB_DB, guid))
+  locks[guid] = query and query:GetUInt32(0) or nil
+end
+
+-- ── XP event ───────────────────────────────────────────────────────────────
 
 local function applyAura(player)
   if state.aura == 0 then
@@ -87,7 +148,7 @@ local function syncAuras()
 end
 
 local function refresh()
-  if not tableReady() then
+  if not tableReady("xp_event") then
     return
   end
 
@@ -136,7 +197,13 @@ local function refresh()
     "UPDATE `%s`.xp_event SET seen_at = NOW() WHERE id = 1", WEB_DB))
 end
 
+-- ── Hooks ──────────────────────────────────────────────────────────────────
+
 RegisterPlayerEvent(PLAYER_EVENT_ON_GIVE_XP, function(event, player, amount, victim)
+  -- A lock beats the event: there is no multiplier that turns zero into XP.
+  if lockedAt(player) then
+    return 0
+  end
   if not state.active or state.multiplier == 1 then
     return
   end
@@ -144,6 +211,14 @@ RegisterPlayerEvent(PLAYER_EVENT_ON_GIVE_XP, function(event, player, amount, vic
 end)
 
 RegisterPlayerEvent(PLAYER_EVENT_ON_LOGIN, function(event, player)
+  refreshLockFor(player)
+  local target = lockedAt(player)
+  if target then
+    player:SendBroadcastMessage(string.format(
+      "|cffffa500Your experience is locked at level %d.|r " ..
+      "Buy the unlock in the shop to start gaining experience again.", target))
+  end
+
   if not state.active then
     return
   end
@@ -153,4 +228,6 @@ RegisterPlayerEvent(PLAYER_EVENT_ON_LOGIN, function(event, player)
 end)
 
 refresh()
+refreshLocks()
 CreateLuaEvent(refresh, POLL_SECONDS * 1000, 0)
+CreateLuaEvent(refreshLocks, LOCK_POLL_SECONDS * 1000, 0)

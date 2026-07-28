@@ -27,7 +27,9 @@ const CLASS_IDS = {
   deathknight: 6, shaman: 7, mage: 8, warlock: 9, druid: 11,
 };
 
-// Kept in sync with SHOP_DDL in src/lib/db.ts.
+// Kept in sync with SHOP_DDL in src/lib/db.ts. The summon and xp_event tables
+// are not here: nothing in this seed touches them, and the webapp creates them
+// on its first request.
 const DDL = [
   `CREATE DATABASE IF NOT EXISTS \`${WEB_DB}\` CHARACTER SET utf8mb4`,
   `CREATE TABLE IF NOT EXISTS \`${WEB_DB}\`.shop_balances (
@@ -40,7 +42,7 @@ const DDL = [
      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
      account_id INT UNSIGNED NOT NULL,
      delta INT NOT NULL,
-     reason ENUM('vote','donation','admin_grant','purchase','refund') NOT NULL,
+     reason ENUM('vote','donation','admin_grant','purchase','refund','summon') NOT NULL,
      reference VARCHAR(64) NULL,
      note VARCHAR(255) NULL,
      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -54,7 +56,7 @@ const DDL = [
      name VARCHAR(128) NOT NULL,
      description TEXT NULL,
      price INT UNSIGNED NOT NULL,
-     delivery_type ENUM('level_boost','profession_boost','item_pack') NOT NULL,
+     delivery_type ENUM('level_boost','profession_boost','item_pack','xp_lock') NOT NULL,
      payload JSON NOT NULL,
      enabled TINYINT(1) NOT NULL DEFAULT 1,
      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -103,10 +105,23 @@ const DDL = [
      CONSTRAINT fk_pack_items_pack FOREIGN KEY (pack_id)
        REFERENCES \`${WEB_DB}\`.shop_packs (id) ON DELETE CASCADE
    ) ENGINE=InnoDB`,
-  // 'bag' was added after the first installs; CREATE TABLE IF NOT EXISTS above
-  // won't widen an existing enum, and re-running a MODIFY is harmless.
+  `CREATE TABLE IF NOT EXISTS \`${WEB_DB}\`.shop_xp_locks (
+     character_guid INT UNSIGNED NOT NULL,
+     account_id INT UNSIGNED NOT NULL,
+     target_level TINYINT UNSIGNED NOT NULL,
+     locked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     released_at DATETIME NULL,
+     PRIMARY KEY (character_guid),
+     KEY idx_active (released_at)
+   ) ENGINE=InnoDB`,
+  // 'bag' and 'xp_lock' were added after the first installs; CREATE TABLE IF
+  // NOT EXISTS above won't widen an existing enum, and re-running a MODIFY is
+  // harmless.
   `ALTER TABLE \`${WEB_DB}\`.shop_pack_items
      MODIFY category ENUM('gear','consumable','bag') NOT NULL`,
+  `ALTER TABLE \`${WEB_DB}\`.shop_products
+     MODIFY delivery_type
+       ENUM('level_boost','profession_boost','item_pack','xp_lock') NOT NULL`,
 ];
 
 // Prices are starting points — tune them in shop_products, they survive reseeds.
@@ -143,6 +158,26 @@ const PRODUCTS = [
     price: 300,
     delivery_type: "profession_boost",
     payload: { skill_cap: 450 },
+  },
+  // level: null means "hold the character where it stands when you buy".
+  // Set a number instead for a bracket product (e.g. { level: 19 }) — it can
+  // be bought at or below that level and takes hold on arrival.
+  {
+    slug: "xp-lock",
+    name: "Experience Lock",
+    description:
+      "Stop a character gaining experience, holding it at its current level. Twink-friendly, and reversible with the unlock.",
+    price: 150,
+    delivery_type: "xp_lock",
+    payload: { action: "lock", level: null },
+  },
+  {
+    slug: "xp-unlock",
+    name: "Remove Experience Lock",
+    description: "Lift the experience lock on a character so it levels again.",
+    price: 50,
+    delivery_type: "xp_lock",
+    payload: { action: "release" },
   },
   {
     slug: "pack-classic",

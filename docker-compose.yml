@@ -6,6 +6,10 @@
 #   3. see README.md for creating the first admin account
 #
 # Uses the official prebuilt AzerothCore images (no compile step).
+#
+# Optional: playerbots mode adds a second realm (mod-playerbots/azerothcore-wotlk)
+# built from source.  Build once with `task playerbots:build`, then enable with
+# PLAYERBOTS_MODE=1 in .env and `task up` (or `task playerbots:up`).
 
 services:
   ac-database:
@@ -91,6 +95,8 @@ services:
       # plus localhost on the host below).
       AC_SOAP_ENABLED: "1"
       AC_SOAP_IP: "0.0.0.0"
+      AC_UPDATES_REDUNDANCY: "0"
+      AC_UPDATES_ALLOW_REHASH: "1"
       # The Lua engine that runs the XP event script is configured by the
       # mod_ale.conf mounted below, not from here.
     ports:
@@ -143,6 +149,7 @@ services:
       AUTH_PORT: "3724"
       WORLD_HOST: ac-worldserver
       WORLD_PORT: "8085"
+      ZEROTIER_NETWORK_ID: ${ZEROTIER_NETWORK_ID:-}
     ports:
       - ${DOCKER_WEB_EXTERNAL_PORT:-8080}:3000
     depends_on:
@@ -215,6 +222,85 @@ services:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
     entrypoint: ["sh", "-c", "if [ -z \"$$TUNNEL_TOKEN\" ]; then echo 'CLOUDFLARE_TUNNEL_TOKEN is not configured in .env. Skipping Cloudflare Tunnel.'; exit 0; fi; exec cloudflared tunnel --no-autoupdate run"]
 
+
+  # ── Playerbots mode (optional) ─────────────────────────────────────────────
+  # A second AzerothCore realm built from source with mod-playerbots enabled.
+  # Shares ac-database (MySQL) and ac-authserver with the standard stack.
+  # Players see two realms in the WoW client and choose between them.
+  #
+  # One-time setup:
+  #   task playerbots:build    <- compile from source (30-60 min, cached after)
+  #   PLAYERBOTS_MODE=1        <- set in .env, then: task up  (or task playerbots:up)
+
+  # One-shot: populates acore_world_pb and acore_characters_pb independently using standard db-import.
+  ac-pb-db-import:
+    container_name: ac-pb-db-import
+    image: acore/ac-wotlk-db-import:${DOCKER_IMAGE_TAG:-master}
+    profiles:
+      - playerbots
+    networks:
+      - ac-network
+    environment:
+      AC_DATA_DIR: "/azerothcore/env/dist/data"
+      AC_LOGS_DIR: "/azerothcore/env/dist/logs"
+      AC_LOGIN_DATABASE_INFO: "ac-database;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_auth"
+      AC_WORLD_DATABASE_INFO: "ac-database;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_world_pb"
+      AC_CHARACTER_DATABASE_INFO: "ac-database;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_characters_pb"
+      AC_UPDATES_AUTO_SETUP: "1"
+    depends_on:
+      ac-database:
+        condition: service_healthy
+
+  # Playerbots worldserver - realm 2, ports 8086 (game) / 7879 (SOAP).
+  ac-pb-worldserver:
+    container_name: ac-pb-worldserver
+    build:
+      context: ./playerbots
+      target: worldserver
+    profiles:
+      - playerbots
+    networks:
+      - ac-network
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    environment:
+      AC_DATA_DIR: "/azerothcore/env/dist/data"
+      AC_LOGS_DIR: "/azerothcore/env/dist/logs"
+      AC_TEMP_DIR: "/azerothcore/env/dist/temp"
+      AC_LOGIN_DATABASE_INFO: "ac-database;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_auth"
+      AC_WORLD_DATABASE_INFO: "ac-database;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_world_pb"
+      AC_CHARACTER_DATABASE_INFO: "ac-database;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_characters_pb"
+      # Realm 2 - registers alongside the standard worldserver (realm 1) in
+      # acore_auth.realmlist so both appear in the WoW client realm list.
+      AC_REALM_ID: "2"
+      AC_SOAP_ENABLED: "1"
+      AC_SOAP_IP: "0.0.0.0"
+      # Playerbots module settings — passed as env vars (AC_ prefix + uppercased).
+      # See: playerbots/playerbots.conf for the full list of options.
+      # These env vars override the mounted conf file values.
+      AC_AI_PLAYERBOT_ENABLED: "1"
+      AC_AI_PLAYERBOT_ALLOW_PLAYER_BOTS: "1"
+      AC_AI_PLAYERBOT_RANDOM_BOT_AUTOLOGIN: "0"
+      AC_AI_PLAYERBOT_MIN_RANDOM_BOTS: "10"
+      AC_AI_PLAYERBOT_MAX_RANDOM_BOTS: "200"
+    ports:
+      - ${DOCKER_PB_WORLD_EXTERNAL_PORT:-8086}:8085
+      - 127.0.0.1:${DOCKER_PB_SOAP_EXTERNAL_PORT:-7879}:7878
+    volumes:
+      # Reuse the same extracted client data (maps/vmaps/mmaps/dbc) - no
+      # second extraction needed since both realms use identical client files.
+      - ac-client-data:/azerothcore/env/dist/data:ro
+      # Playerbots module config - edit ./playerbots/playerbots.conf on the
+      # host and restart the container to apply changes.
+      - ./playerbots/playerbots.conf:/azerothcore/env/dist/etc/mod_playerbots.conf:ro
+    depends_on:
+      ac-database:
+        condition: service_healthy
+      ac-pb-db-import:
+        condition: service_completed_successfully
+      ac-client-data-init:
+        condition: service_completed_successfully
 
 volumes:
   ac-database:

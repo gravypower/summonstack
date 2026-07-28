@@ -1,7 +1,7 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN --mount=type=cache,target=/root/.npm npm install
 
 # Maintenance scripts in scripts/ run outside the Next.js bundle, so they
 # cannot use its bundled mysql2 and the standalone output does not trace it.
@@ -11,7 +11,7 @@ RUN npm install
 FROM node:22-alpine AS script-deps
 WORKDIR /deps
 COPY package.json /tmp/app-package.json
-RUN npm install --omit=dev --no-package-lock --no-save \
+RUN --mount=type=cache,target=/root/.npm npm install --omit=dev --no-package-lock --no-save \
       "mysql2@$(node -p "require('/tmp/app-package.json').dependencies.mysql2")"
 
 FROM node:22-alpine AS build
@@ -19,7 +19,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+RUN --mount=type=cache,target=/app/.next/cache npm run build
 
 FROM node:22-alpine AS runner
 WORKDIR /app

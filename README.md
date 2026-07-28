@@ -8,9 +8,11 @@ King 3.3.5a) private server in Docker Compose, with a built-in web portal:
 - **Admin panel** — one-click invite links, account management
   (ban/unban, GM levels, password resets), and a live worldserver console
   over SOAP.
-- **Shop backend** — a points currency with an append-only ledger, level-80
-  boosts, profession boosts, and 60/70/80 starter packs delivered by in-game
-  mail over SOAP. See [Shop](#shop) below.
+- **Shop backend** — a points currency with an append-only ledger, level and
+  profession boosts, experience locks, and 60/70/80 starter packs delivered
+  by in-game mail over SOAP. See [Shop](#shop) below.
+- **Summon rewards** — a realm-wide summon counter, and shop points for
+  summoning other players. See [Summon rewards](#summon-rewards) below.
 
 ## Stack
 
@@ -19,9 +21,14 @@ King 3.3.5a) private server in Docker Compose, with a built-in web portal:
 | `ac-database`        | MySQL 8.4                                         | 127.0.0.1:3306   |
 | `ac-db-import`       | One-shot DB schema import/updates                 | —                |
 | `ac-client-data-init`| One-shot download of maps/DBC data (~3 GB)         | —                |
-| `ac-authserver`      | Login server                                      | 3724             |
-| `ac-worldserver`     | Game server (SOAP API on 7878)                    | 8085, 127.0.0.1:7878 |
+| `ac-authserver`      | Login server (shared by both realms)              | 3724             |
+| `ac-worldserver`     | Game server, realm 1 (SOAP on 7878)               | 8085, 127.0.0.1:7878 |
 | `ac-webapp`          | Next.js player portal + admin panel               | 8080             |
+| `ac-pb-db-import`    | *(playerbots)* One-shot DB import                 | —                |
+| `ac-pb-worldserver`  | *(playerbots)* Game server, realm 2               | 8086, 127.0.0.1:7879 |
+
+The two `ac-pb-*` services are **optional** and only start when `PLAYERBOTS_MODE=1`
+is set in `.env` (or via `task playerbots:up`). See [Playerbots Mode](#playerbots-mode).
 
 ## Task runner
 
@@ -52,17 +59,104 @@ locally are not re-pulled, so an old `ac-db-import` can hand a months-old
 schema to a current `ac-worldserver`, which then crash-loops on missing
 tables. `task pull && task db:import` fixes it.
 
+## Playerbots Mode
+
+Playerbots mode runs a **second AzerothCore realm** alongside the standard one,
+built from the [`mod-playerbots/azerothcore-wotlk`](https://github.com/mod-playerbots/azerothcore-wotlk)
+fork with the [mod-playerbots](https://github.com/mod-playerbots/mod-playerbots)
+module compiled in. NPC bots populate the world automatically and players can
+summon personal bots to fill group roles.
+
+Both realms share `ac-database` (MySQL) and `ac-authserver` — players see
+two entries in the WoW client realm list and pick whichever they want.
+
+### Architecture
+
+```
+WoW client → ac-authserver (port 3724, acore_auth DB)
+                  ├─→ Realm 1: ac-worldserver     (port 8085, acore_world DB)     [standard]
+                  └─→ Realm 2: ac-pb-worldserver  (port 8086, acore_world_pb DB)  [playerbots]
+```
+
+### Setup
+
+> **Note**: Because no prebuilt Docker image exists for the playerbots fork,
+> the first build compiles ~600 K lines of C++. Expect **30–60 minutes**.
+> Docker layer-caches the result — subsequent starts are instant.
+
+```bash
+# 1. Build once (clone + compile from source)
+task playerbots:build
+
+# 2. Enable in .env
+echo 'PLAYERBOTS_MODE=1' >> .env
+
+# 3. Start (or just run task up if the stack is already running)
+task playerbots:up
+
+# 4. Create an admin account on the playerbots realm
+task playerbots:world
+# Inside the console:
+# AC> account create myuser mypassword
+# AC> account set gmlevel myuser 3 -1
+# Detach: Ctrl-P then Ctrl-Q
+```
+
+### Playerbots tasks
+
+| Command | What it does |
+| ------- | ------------ |
+| `task playerbots:build` | Compile worldserver from source (first-time only) |
+| `task playerbots:up` | Start playerbots services |
+| `task playerbots:down` | Stop playerbots services (keeps data) |
+| `task playerbots:world` | Attach to the playerbots worldserver console |
+| `task playerbots:logs` | Follow playerbots worldserver logs |
+| `task playerbots:status` | Show container status |
+| `task playerbots:db:import` | Re-run the DB importer (safe to re-run) |
+
+### Configuration
+
+Bot settings live in [`playerbots/playerbots.conf`](./playerbots/playerbots.conf).
+Edit the file on the host and restart the container to apply:
+
+```bash
+task restart -- ac-pb-worldserver
+```
+
+Key settings (all under `[worldserver]` in the conf):
+
+| Setting | Default | What it does |
+| ------- | ------- | ------------ |
+| `AiPlayerbot.enabled` | `1` | Master switch |
+| `AiPlayerbot.RandomBotAutologin` | `0` | Auto-populate world with bots |
+| `AiPlayerbot.minRandomBots` / `maxRandomBots` | `10` / `200` | Random bot count |
+| `AiPlayerbot.AllowPlayerBots` | `1` | Let players summon bots |
+| `AiPlayerbot.maxAddedBots` | `3` | Max bots per player |
+
+Full reference: <https://github.com/mod-playerbots/mod-playerbots/wiki/Playerbot-Configuration>
+
 ## Shop
 
 The webapp ships a points shop at `/shop` (in the nav once logged in): a
 points currency stored in `summonstack_web` with an append-only ledger,
 API routes under `/api/shop/*`, and an admin grant route.
 
-- **Products** — level-80 boost, profession boost (maxes learned primary +
-  secondary professions to 450; the character must be logged out), 60/70/80
-  starter packs (pre-raid gear for the character's class/spec), and 60/70/80
-  raid consumable packs (flasks, elixirs, potions, weapon oils, protection
-  potions, buff food). Everything arrives by in-game mail.
+- **Products** — 60/70/80 level boosts, profession boost (maxes learned
+  primary + secondary professions to 450; the character must be logged out),
+  the experience lock and its unlock, 60/70/80 starter packs (pre-raid gear
+  for the character's class/spec), and 60/70/80 raid consumable packs
+  (flasks, elixirs, potions, weapon oils, protection potions, buff food).
+  Gear and consumables arrive by in-game mail.
+- **Experience lock** — freezes a character at its current level: kill,
+  quest and exploration XP all stop counting, which is what twinks want for a
+  BG bracket. It is a row in `summonstack_web.shop_xp_locks`, read by
+  `worldserver/lua_scripts/xp.lua` every 5 seconds and on each login, so it
+  applies without a restart and survives one. **Remove Experience Lock**
+  lifts it. A level boost is refused on a locked character — it sets the
+  level outright and would walk straight past the lock — so unlock first.
+  Locks are per character, not per account. To sell a bracket lock instead
+  (bought early, biting on arrival), add a product row with
+  `payload = {"action":"lock","level":19}`; no code change needed.
 - **Gear coverage** — all three starter packs cover 9 classes × 17 specs,
   including tank and healer sets. A few slots are intentionally empty where
   no suitable item exists at that bracket; the `note` field on each entry
@@ -76,7 +170,8 @@ API routes under `/api/shop/*`, and an admin grant route.
   every balance plus the full ledger. `task shop:grant USER=name AMOUNT=500`
   does the same from the terminal.
 - **How players receive purchases** — level and profession boosts apply to
-  the character directly; item packs arrive as in-game **mail** from the
+  the character directly, experience locks take hold within a few seconds;
+  item packs arrive as in-game **mail** from the
   worldserver. Mail holds 12 attachments, so a full gear pack is split
   across two or three letters. Tell players to check a mailbox; mail expires
   after 30 days if never collected.
@@ -87,6 +182,55 @@ API routes under `/api/shop/*`, and an admin grant route.
   have arrived) — check `summonstack_web.shop_transactions` and the game's
   mail log before refunding by hand.
 
+## Summon rewards
+
+The realm keeps a running count of every summon, shown on the front page, and
+pays the summoner shop points for it. **Admin → Summons** (`/admin/summons`)
+owns the rate and the anti-farm rules, and lists recent summons with what each
+one paid.
+
+- **What counts as a summon.** A player casts a warlock Ritual of Summoning
+  (spell 7720, from the Summoning Portal gameobject) or clicks a meeting stone
+  (23598) at another player, *and that player actually arrives*. The core sends
+  a summon as an offer with two minutes to accept, and the accepted teleport
+  lands the target on the caster's position at cast time — so
+  `worldserver/lua_scripts/summons.lua` parks each cast and only counts it once
+  the target turns up within 30 yards of that spot. A ritual spammed at someone
+  who never clicks Accept earns nothing, and neither does a cast at someone
+  already standing next to you.
+- **Who gets paid.** The summoner, 5 points by default, up to 100 points a day.
+  Summoning an alt on your own account never pays — that one is not tunable.
+  Beyond that, the same two accounts only pay each other once every 30 minutes.
+  All three numbers are editable in the panel.
+- **Worth more to summon.** Under **Worth more to summon** you can put a
+  multiplier on an account: summoning any of *its* characters pays the summoner
+  that much (2× by default, anything from 0 to 10). Useful for the player
+  everyone struggles to reach, or a launch-week bonus. The multiplier is on the
+  *summoned* account, so it does nothing for that account's own summons, and
+  `0` makes summoning them worth nothing — the way to shut one farm down
+  without turning rewards off for the realm. Whoever is currently worth extra
+  is listed on the front page and in the shop, so players know who to look for,
+  and the multiplier that applied is frozen onto the summon row and named in
+  the ledger note.
+- **Where the money moves.** The Lua script only appends rows to
+  `summonstack_web.summon_events`; the portal turns each row into points, keyed
+  on the row id, so one summon can never pay twice. Every payout is a `summon`
+  row in the shop ledger, visible under **Shop points** alongside purchases.
+- **The payout is lazy.** Nothing in this stack schedules jobs, so the sweep
+  runs when the front page, the shop or the admin page is loaded. A fresh summon
+  therefore shows up in a balance within seconds of anyone touching the portal,
+  not the instant it happens — the in-game line says the points land "on the
+  portal" for that reason. The realm counter itself is live either way.
+- **Players are told**: the summoner gets a line in chat with the realm summon
+  number and what it is worth — including any bounty on the person they
+  summoned — and every 50th summon is announced server-wide (`announceEvery`,
+  0 to stay quiet).
+- **Turning payouts off keeps the counter.** Those summons are recorded as
+  unpaid and are never paid retroactively when you turn rewards back on.
+- **Same mounting rules as the XP script** — see the notes below, including the
+  `seen_at` heartbeat the panel warns about. If the worldserver is not reading,
+  no summon is counted at all.
+
 ## XP events
 
 **Admin → XP event** (`/admin/event`) runs a server-wide experience boost —
@@ -94,10 +238,15 @@ the 3.3.5a equivalent of Joyous Journeys — with no restart and nobody
 disconnected. Set a multiplier, optionally an end time, and start it.
 
 - **How it works.** The panel writes one row to `summonstack_web.xp_event`.
-  `worldserver/lua_scripts/joyous_journeys.lua` polls that row every 15
-  seconds and multiplies XP in the worldserver's `OnGiveXP` hook, which
-  covers kill, quest and exploration XP alike. Rested and heirloom bonuses
-  stack on top as usual.
+  `worldserver/lua_scripts/xp.lua` polls that row every 15 seconds and
+  multiplies XP in the worldserver's `OnGiveXP` hook, which covers kill,
+  quest and exploration XP alike. Rested and heirloom bonuses stack on top as
+  usual.
+- **One script owns the XP hook.** `xp.lua` also applies the shop's
+  experience locks, deliberately in the same file: two scripts registering
+  `OnGiveXP` would both run and the engine keeps whichever returned last, so
+  a running event could hand XP back to a locked character. A lock wins,
+  otherwise the multiplier applies.
 - **Players are told**: a server-wide announcement on start and end, a line
   in chat on login while it runs, and a buff icon for as long as it lasts.
 - **About the buff icon.** Joyous Journeys itself is a Classic-2019 spell
@@ -117,6 +266,15 @@ disconnected. Set a multiplier, optionally an end time, and start it.
   mount. `.reload ale` in the admin console forces it. A broken script logs
   `[ALE]: Error loading ...` with a line number to `task logs -- ac-worldserver`
   and leaves the other scripts running.
+- **Replacing the directory does need a restart.** A bind mount follows the
+  inode, not the path, so anything that recreates `worldserver/lua_scripts`
+  itself — deleting it, a branch switch that removes and restores it —
+  detaches the running container from the real directory. Scripts then stop
+  silently: no error, no reload, and `docker compose exec ac-worldserver ls
+  /azerothcore/lua_scripts` comes back empty while the host directory is
+  full. `docker compose up -d --force-recreate ac-worldserver` reattaches it.
+  The `seen_at` heartbeat on `summonstack_web.xp_event` is the tell — if the
+  XP event panel says the worldserver is not reading, this is why.
 
 ## API collection
 
@@ -330,6 +488,11 @@ docker compose up -d
 - The admin console posts commands to the worldserver's **SOAP API**
   (port 7878, reachable only from inside the compose network and from
   localhost) using the `SOAP_USER`/`SOAP_PASS` account.
+- The two Lua scripts in `worldserver/lua_scripts` talk to the webapp through
+  the database only, in both directions: `xp.lua` reads the XP event and the
+  shop's experience locks, and `summons.lua` reads its reward settings and
+  appends the summons it counts. Neither calls the portal, and the portal never
+  calls the worldserver except over SOAP for shop deliveries.
 
 ## Security notes
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import CopyButton, { ClickToCopy, CopySnippet } from "../../copy-button";
 
 interface RealmStatus {
   id: number;
@@ -394,11 +395,11 @@ export default function AdminRealmPage() {
         <ul className="muted">
           <li>
             <strong>ZeroTier (Full Virtual LAN):</strong> Join a network with{" "}
-            <span className="mono">task zerotier:join NETWORK=&lt;id&gt;</span>. Set <em>Address</em> above to your host&apos;s ZeroTier IP so players on the same ZeroTier network can reach the game server and website directly.
+            <ClickToCopy text="task zerotier:join NETWORK=<id>">task zerotier:join NETWORK=&lt;id&gt;</ClickToCopy>. Set <em>Address</em> above to your host&apos;s ZeroTier IP so players on the same ZeroTier network can reach the game server and website directly.
           </li>
           <li>
             <strong>Cloudflare Tunnel (Web & Downloads):</strong> Proxy HTTP/HTTPS traffic through Cloudflare with{" "}
-            <span className="mono">task cloudflare:token TOKEN=&lt;token&gt;</span>. Route your Cloudflare hostname in Cloudflare Zero Trust to <span className="mono">http://ac-webapp:3000</span> (portal) and <span className="mono">http://ac-downloads:80</span> (downloads).
+            <ClickToCopy text="task cloudflare:token TOKEN=<token>">task cloudflare:token TOKEN=&lt;token&gt;</ClickToCopy>. Route your Cloudflare hostname in Cloudflare Zero Trust to <ClickToCopy text="http://ac-webapp:3000">http://ac-webapp:3000</ClickToCopy> (portal) and <ClickToCopy text="http://ac-downloads:80">http://ac-downloads:80</ClickToCopy> (downloads).
           </li>
         </ul>
       </div>
@@ -411,13 +412,13 @@ export default function AdminRealmPage() {
           <span className="mono">Data/enUS/realmlist.wtf</span> (or their locale
           folder) so it contains exactly one line:
         </p>
-        <pre className="snippet mono">
-          {`set realmlist ${
+        <CopySnippet
+          text={`set realmlist ${
             realms[0] && !realms[0].localOnly
               ? realms[0].address
               : "YOUR.LAN.OR.PUBLIC.IP"
           }`}
-        </pre>
+        />
         <p className="muted">
           That points the client at the <em>login</em> server on port 3724. The
           address above is only what the login server then redirects them to for

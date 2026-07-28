@@ -1,0 +1,26 @@
+# Domain: Web Shop Management
+version: "3"
+
+tasks:
+  seed:
+    desc: Seed/refresh the shop catalog and starter packs (validates item ids)
+    cmds:
+      - docker compose exec ac-webapp node scripts/seed-shop.mjs
+
+  grant:
+    desc: "Grant shop points directly: task shop:grant USER=name AMOUNT=500"
+    requires:
+      vars: [USER, AMOUNT]
+    silent: true
+    cmds:
+      - |
+        docker compose exec -T ac-database mysql -uroot -p{{.DB_PASS}} -e "
+          SET @acct = (SELECT id FROM acore_auth.account WHERE username = UPPER('{{.USER}}'));
+          SELECT IF(@acct IS NULL, 'No such account', 'ok') AS check_account;
+          INSERT INTO summonstack_web.shop_balances (account_id, balance)
+            SELECT @acct, {{.AMOUNT}} WHERE @acct IS NOT NULL
+            ON DUPLICATE KEY UPDATE balance = balance + {{.AMOUNT}};
+          INSERT INTO summonstack_web.shop_ledger (account_id, delta, reason, note)
+            SELECT @acct, {{.AMOUNT}}, 'admin_grant', 'task shop:grant' WHERE @acct IS NOT NULL;
+          SELECT balance FROM summonstack_web.shop_balances WHERE account_id = @acct;
+        " 2>/dev/null

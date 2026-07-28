@@ -1,0 +1,491 @@
+# Domain: Multi-Realm Management
+version: "3"
+
+tasks:
+  default:
+    desc: List all registered realms in the stack database
+    cmds:
+      - task: list
+    silent: true
+
+  list:
+    desc: Show all registered realms in acore_auth database and container status
+    silent: true
+    cmds:
+      - |
+        echo "── Registered Realms & Container Status ──"
+        python3 scripts/list_realms.py
+
+  add:
+    desc: "Add a normal realm: task realm:add NAME=\"My Realm\" [ID=3] [PORT=8087] [ADDR=1.2.3.4] [CREATE_DB=1]"
+    vars:
+      NAME: '{{.NAME | default ""}}'
+      ID: '{{.ID | default ""}}'
+      PORT: '{{.PORT | default ""}}'
+      ADDR: '{{.ADDR | default ""}}'
+      CREATE_DB: '{{.CREATE_DB | default "1"}}'
+    cmds:
+      - |
+        set -e
+        if [ -z "{{.NAME}}" ]; then
+          echo "Usage: task realm:add NAME=\"Realm Name\" [ID=3] [PORT=8087] [ADDR=1.2.3.4] [CREATE_DB=1]" >&2
+          exit 1
+        fi
+        
+        id="{{.ID}}"
+        if [ -z "$id" ]; then
+          max_id=$(docker exec ac-database mysql -uroot -p"{{.DB_PASS}}" -N -e "SELECT COALESCE(MAX(id), 0) FROM acore_auth.realmlist;" 2>/dev/null | tr -d '\r\n')
+          id=$((max_id + 1))
+        fi
+
+        addr="{{.ADDR}}"
+        if [ -z "$addr" ]; then
+          addr=$(docker exec ac-database mysql -uroot -p"{{.DB_PASS}}" -N -e "SELECT address FROM acore_auth.realmlist WHERE id=1;" 2>/dev/null | tr -d '\r\n')
+          addr="${addr:-127.0.0.1}"
+        fi
+
+        port="{{.PORT}}"
+        if [ -z "$port" ]; then
+          port=$((8085 + id - 1))
+        fi
+
+        soap_port=$((7878 + id - 1))
+        chars_db="acore_characters_${id}"
+        if [ "{{.CREATE_DB}}" = "0" ]; then
+          chars_db="acore_characters"
+        fi
+
+        # Validation checks
+        existing_id=$(docker exec ac-database mysql -uroot -p"{{.DB_PASS}}" -N -e "SELECT id FROM acore_auth.realmlist WHERE id=$id;" 2>/dev/null | tr -d '\r\n')
+        if [ -n "$existing_id" ]; then
+          echo "Error: Realm ID $id already exists in realmlist database!" >&2
+          echo "To create a new realm, omit ID (auto-assigns ID) or specify an unused ID (e.g. ID=$((id+1)))." >&2
+          exit 1
+        fi
+
+        existing_name=$(docker exec ac-database mysql -uroot -p"{{.DB_PASS}}" -N -e "SELECT name FROM acore_auth.realmlist WHERE name='{{.NAME}}';" 2>/dev/null | tr -d '\r\n')
+        if [ -n "$existing_name" ]; then
+          echo "Error: Realm Name '{{.NAME}}' already exists!" >&2
+          exit 1
+        fi
+
+        existing_port=$(docker exec ac-database mysql -uroot -p"{{.DB_PASS}}" -N -e "SELECT port FROM acore_auth.realmlist WHERE port=$port;" 2>/dev/null | tr -d '\r\n')
+        if [ -n "$existing_port" ]; then
+          echo "Error: Port $port is already assigned to an existing realm!" >&2
+          echo "Specify an available port (e.g. PORT=$((port+1)))." >&2
+          exit 1
+        fi
+
+        echo "Registering Normal Realm..."
+        echo "  ID:        $id"
+        echo "  Name:      {{.NAME}}"
+        echo "  Address:   $addr"
+        echo "  Game Port: $port"
+        echo "  SOAP Port: $soap_port"
+        echo "  Chars DB:  $chars_db"
+
+        docker exec ac-database mysql -uroot -p"{{.DB_PASS}}" -e "
+          INSERT INTO acore_auth.realmlist 
+            (id, name, address, localAddress, localSubnetMask, port, icon, flag, timezone, allowedSecurityLevel, population, gamebuild) 
+          VALUES 
+            ($id, '{{.NAME}}', '$addr', '127.0.0.1', '255.255.255.0', $port, 0, 0, 1, 0, 0, 12340);
+        "
+
+        if [ "{{.CREATE_DB}}" != "0" ]; then
+          echo "Provisioning character database ${chars_db}..."
+          docker exec ac-database mysql -uroot -p"{{.DB_PASS}}" -e "
+            CREATE DATABASE IF NOT EXISTS \`${chars_db}\`;
+          " 2>/dev/null
+          docker exec ac-database sh -c "mysqldump -uroot -p'{{.DB_PASS}}' --no-data acore_characters 2>/dev/null | mysql -uroot -p'{{.DB_PASS}}' ${chars_db}" 2>/dev/null || true
+          echo "Database ${chars_db} created and schema populated."
+        fi
+
+        python3 scripts/manage_realm_compose.py add \
+          --id "$id" \
+          --port "$port" \
+          --soap-port "$soap_port" \
+          --type normal \
+          --chars-db "$chars_db"
+
+        echo "Starting container ac-realm-${id}..."
+        docker compose up -d "ac-realm-${id}"
+
+        echo ""
+        echo "Normal Realm #$id ('{{.NAME}}') registered and container started!"
+        echo ""
+        task realm:list
+
+  "add:playerbots":
+    desc: "Add a playerbots realm: task realm:add:playerbots NAME=\"PB Realm\" [ID=3] [PORT=8087] [ADDR=1.2.3.4] [CREATE_DB=1]"
+    vars:
+      NAME: '{{.NAME | default ""}}'
+      ID: '{{.ID | default ""}}'
+      PORT: '{{.PORT | default ""}}'
+      ADDR: '{{.ADDR | default ""}}'
+      CREATE_DB: '{{.CREATE_DB | default "1"}}'
+    cmds:
+      - |
+        set -e
+        if [ -z "{{.NAME}}" ]; then
+          echo "Usage: task realm:add:playerbots NAME=\"PB Realm Name\" [ID=3] [PORT=8087] [ADDR=1.2.3.4] [CREATE_DB=1]" >&2
+          exit 1
+        fi
+        
+        id="{{.ID}}"
+        if [ -z "$id" ]; then
+          max_id=$(docker exec ac-database mysql -uroot -p"{{.DB_PASS}}" -N -e "SELECT COALESCE(MAX(id), 0) FROM acore_auth.realmlist;" 2>/dev/null | tr -d '\r\n')
+          id=$((max_id + 1))
+        fi
+
+        addr="{{.ADDR}}"
+        if [ -z "$addr" ]; then
+          addr=$(docker exec ac-database mysql -uroot -p"{{.DB_PASS}}" -N -e "SELECT address FROM acore_auth.realmlist WHERE id=1;" 2>/dev/null | tr -d '\r\n')
+          addr="${addr:-127.0.0.1}"
+        fi
+
+        port="{{.PORT}}"
+        if [ -z "$port" ]; then
+          port=$((8085 + id - 1))
+        fi
+
+        soap_port=$((7878 + id - 1))
+        world_db="acore_world_pb_${id}"
+        chars_db="acore_characters_pb_${id}"
+        if [ "{{.CREATE_DB}}" = "0" ]; then
+          world_db="acore_world_pb"
+          chars_db="acore_characters_pb"
+        fi
+
+        # Validation checks
+        existing_id=$(docker exec ac-database mysql -uroot -p"{{.DB_PASS}}" -N -e "SELECT id FROM acore_auth.realmlist WHERE id=$id;" 2>/dev/null | tr -d '\r\n')
+        if [ -n "$existing_id" ]; then
+          echo "Error: Realm ID $id already exists in realmlist database!" >&2
+          echo "To create a new realm, omit ID (auto-assigns ID) or specify an unused ID (e.g. ID=$((id+1)))." >&2
+          exit 1
+        fi
+
+        existing_name=$(docker exec ac-database mysql -uroot -p"{{.DB_PASS}}" -N -e "SELECT name FROM acore_auth.realmlist WHERE name='{{.NAME}}';" 2>/dev/null | tr -d '\r\n')
+        if [ -n "$existing_name" ]; then
+          echo "Error: Realm Name '{{.NAME}}' already exists!" >&2
+          exit 1
+        fi
+
+        existing_port=$(docker exec ac-database mysql -uroot -p"{{.DB_PASS}}" -N -e "SELECT port FROM acore_auth.realmlist WHERE port=$port;" 2>/dev/null | tr -d '\r\n')
+        if [ -n "$existing_port" ]; then
+          echo "Error: Port $port is already assigned to an existing realm!" >&2
+          echo "Specify an available port (e.g. PORT=$((port+1)))." >&2
+          exit 1
+        fi
+
+        echo "Registering Playerbots Realm..."
+        echo "  ID:        $id"
+        echo "  Name:      {{.NAME}}"
+        echo "  Address:   $addr"
+        echo "  Game Port: $port"
+        echo "  SOAP Port: $soap_port"
+        echo "  World DB:  $world_db"
+        echo "  Chars DB:  $chars_db"
+
+        docker exec ac-database mysql -uroot -p"{{.DB_PASS}}" -e "
+          INSERT INTO acore_auth.realmlist 
+            (id, name, address, localAddress, localSubnetMask, port, icon, flag, timezone, allowedSecurityLevel, population, gamebuild) 
+          VALUES 
+            ($id, '{{.NAME}}', '$addr', '127.0.0.1', '255.255.255.0', $port, 0, 0, 1, 0, 0, 12340);
+        "
+
+        if [ "{{.CREATE_DB}}" != "0" ]; then
+          echo "Provisioning playerbot databases ${world_db} and ${chars_db}..."
+          docker exec ac-database mysql -uroot -p"{{.DB_PASS}}" -e "
+            CREATE DATABASE IF NOT EXISTS \`${world_db}\`;
+            CREATE DATABASE IF NOT EXISTS \`${chars_db}\`;
+          " 2>/dev/null
+          docker exec ac-database sh -c "mysqldump -uroot -p'{{.DB_PASS}}' acore_world_pb 2>/dev/null | mysql -uroot -p'{{.DB_PASS}}' ${world_db}" 2>/dev/null || docker exec ac-database sh -c "mysqldump -uroot -p'{{.DB_PASS}}' acore_world 2>/dev/null | mysql -uroot -p'{{.DB_PASS}}' ${world_db}" 2>/dev/null || true
+          docker exec ac-database sh -c "mysqldump -uroot -p'{{.DB_PASS}}' --no-data acore_characters_pb 2>/dev/null | mysql -uroot -p'{{.DB_PASS}}' ${chars_db}" 2>/dev/null || docker exec ac-database sh -c "mysqldump -uroot -p'{{.DB_PASS}}' --no-data acore_characters 2>/dev/null | mysql -uroot -p'{{.DB_PASS}}' ${chars_db}" 2>/dev/null || true
+          echo "Databases ${world_db} and ${chars_db} created and populated."
+        fi
+
+        python3 scripts/manage_realm_compose.py add \
+          --id "$id" \
+          --port "$port" \
+          --soap-port "$soap_port" \
+          --type playerbots \
+          --world-db "$world_db" \
+          --chars-db "$chars_db"
+
+        echo "Starting container ac-pb-realm-${id}..."
+        docker compose up -d "ac-pb-realm-${id}"
+
+        echo ""
+        echo "Playerbots Realm #$id ('{{.NAME}}') registered and container started!"
+        echo ""
+        task realm:list
+
+  remove:
+    desc: "Remove a realm: task realm:remove ID=3 [DROP_DB=1]"
+    vars:
+      ID: '{{.ID | default ""}}'
+      DROP_DB: '{{.DROP_DB | default "0"}}'
+    cmds:
+      - |
+        set -e
+        if [ -z "{{.ID}}" ]; then
+          echo "Usage: task realm:remove ID=<realm-id> [DROP_DB=1]" >&2
+          exit 1
+        fi
+
+        id="{{.ID}}"
+        echo "Stopping and removing containers for Realm ID $id..."
+        case "$id" in
+          1) docker compose stop ac-worldserver 2>/dev/null || true ;;
+          2) docker compose stop ac-pb-worldserver 2>/dev/null || true ;;
+        esac
+        docker compose stop "ac-realm-${id}" "ac-pb-realm-${id}" 2>/dev/null || true
+        docker compose rm -f "ac-realm-${id}" "ac-pb-realm-${id}" 2>/dev/null || true
+
+        python3 scripts/manage_realm_compose.py remove --id "$id"
+
+        echo "Removing Realm ID $id from realmlist database..."
+        docker exec ac-database mysql -uroot -p"{{.DB_PASS}}" -e "
+          DELETE FROM acore_auth.realmlist WHERE id = $id;
+        "
+
+        if [ "{{.DROP_DB}}" = "1" ]; then
+          echo "Dropping realm $id databases if exist..."
+          docker exec ac-database mysql -uroot -p"{{.DB_PASS}}" -e "
+            DROP DATABASE IF EXISTS \`acore_characters_${id}\`;
+            DROP DATABASE IF EXISTS \`acore_characters_pb_${id}\`;
+            DROP DATABASE IF EXISTS \`acore_world_pb_${id}\`;
+          " 2>/dev/null || true
+          echo "Databases for Realm $id dropped."
+        fi
+
+        echo "Realm ID $id removed successfully."
+        echo ""
+        task realm:list
+
+  up:
+    desc: "Start realm service(s): task realm:up [REALM=1|2|pb|main]"
+    vars:
+      REALM: '{{.REALM | default ""}}'
+    cmds:
+      - |
+        case "{{.REALM}}" in
+          2|pb|playerbots)
+            docker compose --profile playerbots up -d ac-pb-db-import ac-pb-worldserver
+            ;;
+          1|main|standard)
+            docker compose up -d ac-worldserver
+            ;;
+          "")
+            pb_mode=$(grep -E '^PLAYERBOTS_MODE=' .env 2>/dev/null | cut -d= -f2- || true)
+            profiles=""
+            if [ -n "$pb_mode" ] && [ "$pb_mode" != "0" ]; then
+              profiles="--profile playerbots"
+            fi
+            docker compose $profiles up -d
+            ;;
+          *)
+            docker compose up -d "ac-realm-{{.REALM}}" 2>/dev/null || docker compose up -d "ac-pb-realm-{{.REALM}}"
+            ;;
+        esac
+      - task: status
+        vars: {REALM: "{{.REALM}}"}
+
+  down:
+    desc: "Stop realm service(s): task realm:down [REALM=1|2|pb|main]"
+    vars:
+      REALM: '{{.REALM | default ""}}'
+    cmds:
+      - |
+        case "{{.REALM}}" in
+          2|pb|playerbots)
+            docker compose stop ac-pb-worldserver ac-pb-db-import
+            ;;
+          1|main|standard)
+            docker compose stop ac-worldserver
+            ;;
+          "")
+            docker compose stop
+            ;;
+          *)
+            docker compose stop "ac-realm-{{.REALM}}" "ac-pb-realm-{{.REALM}}" 2>/dev/null || true
+            ;;
+        esac
+
+  restart:
+    desc: "Restart realm service(s): task realm:restart [REALM=1|2|pb|main]"
+    vars:
+      REALM: '{{.REALM | default "1"}}'
+    cmds:
+      - |
+        target="ac-worldserver"
+        case "{{.REALM}}" in
+          2|pb|playerbots) target="ac-pb-worldserver" ;;
+          1|main|standard) target="ac-worldserver" ;;
+          *)
+            if [ -n "$(docker ps -q -f name=ac-pb-realm-{{.REALM}})" ]; then
+              target="ac-pb-realm-{{.REALM}}"
+            else
+              target="ac-realm-{{.REALM}}"
+            fi
+            ;;
+        esac
+        docker compose restart "$target"
+
+  status:
+    desc: "Show realm container status: task realm:status [REALM=1|2|pb|main]"
+    vars:
+      REALM: '{{.REALM | default ""}}'
+    silent: true
+    cmds:
+      - |
+        case "{{.REALM}}" in
+          2|pb|playerbots)
+            docker compose --profile playerbots ps -a ac-pb-worldserver
+            ;;
+          1|main|standard)
+            docker compose ps -a ac-worldserver
+            ;;
+          "")
+            docker compose ps -a
+            ;;
+          *)
+            docker compose ps -a "ac-realm-{{.REALM}}" "ac-pb-realm-{{.REALM}}"
+            ;;
+        esac
+
+  logs:
+    desc: "Follow realm logs: task realm:logs [REALM=1|2|pb|main]"
+    vars:
+      REALM: '{{.REALM | default ""}}'
+    cmds:
+      - |
+        bash -c '
+          trap "exit 0" INT
+          case "{{.REALM}}" in
+            2|pb|playerbots)
+              exec docker compose --profile playerbots logs -f --tail 100 ac-pb-worldserver
+              ;;
+            1|main|standard)
+              exec docker compose logs -f --tail 100 ac-worldserver
+              ;;
+            "")
+              exec docker compose --profile "*" logs -f --tail 100 2>/dev/null
+              ;;
+            *)
+              target="ac-realm-{{.REALM}}"
+              if [ -n "$(docker ps -q -f name=ac-pb-realm-{{.REALM}})" ]; then
+                target="ac-pb-realm-{{.REALM}}"
+              fi
+              exec docker compose --profile "*" logs -f --tail 100 "$target"
+              ;;
+          esac
+        '
+
+  world:
+    desc: "Attach to a realm console: task realm:world [REALM=1|2|pb|main]"
+    vars:
+      REALM: '{{.REALM | default "1"}}'
+    cmds:
+      - |
+        target="ac-worldserver"
+        case "{{.REALM}}" in
+          2|pb|playerbots) target="ac-pb-worldserver" ;;
+          1|main|standard) target="ac-worldserver" ;;
+          *)
+            if [ -n "$(docker ps -q -f name=ac-pb-realm-{{.REALM}})" ]; then
+              target="ac-pb-realm-{{.REALM}}"
+            else
+              target="ac-realm-{{.REALM}}"
+            fi
+            ;;
+        esac
+        echo "Attaching to $target console (detach with Ctrl-P Ctrl-Q)..."
+        docker attach "$target"
+
+  db:import:
+    desc: "Run DB importer for a realm: task realm:db:import [REALM=1|2|pb]"
+    vars:
+      REALM: '{{.REALM | default "1"}}'
+    cmds:
+      - |
+        case "{{.REALM}}" in
+          2|pb|playerbots)
+            docker compose --profile playerbots up -d --force-recreate --no-deps ac-pb-db-import
+            echo "Waiting for playerbots DB import to finish..."
+            code=$(docker wait ac-pb-db-import)
+            if [ "$code" != "0" ]; then
+              echo "Import FAILED (exit $code). Last 40 log lines:" >&2
+              docker logs --tail 40 ac-pb-db-import >&2
+              exit 1
+            fi
+            echo "Import complete."
+            ;;
+          *)
+            task db:import
+            ;;
+        esac
+
+  build:
+    desc: "Build realm worldserver from source: task realm:build [REALM=pb]"
+    vars:
+      REALM: '{{.REALM | default "pb"}}'
+    cmds:
+      - |
+        case "{{.REALM}}" in
+          2|pb|playerbots)
+            echo "Building playerbots worldserver from source..."
+            BUILDX_NO_DEFAULT_ATTESTATIONS=1 \
+              docker compose --profile playerbots build \
+              ac-pb-worldserver ac-pb-db-import
+            echo "Build complete."
+            ;;
+          *)
+            echo "Standard realm uses official prebuilt Docker images."
+            echo "For playerbots source build, run: task realm:build REALM=pb"
+            ;;
+        esac
+
+  set-addr:
+    desc: "Set realmlist address: task realm:set-addr REALM=1 ADDR=1.2.3.4"
+    vars:
+      REALM: '{{.REALM | default "1"}}'
+      ADDR: '{{.ADDR | default ""}}'
+    cmds:
+      - |
+        if [ -z "{{.ADDR}}" ]; then
+          echo ""
+          echo "Usage: task realm:set-addr REALM=<id> ADDR=<server-ip-or-hostname>"
+          echo "Example: task realm:set-addr REALM=1 ADDR=192.168.1.50"
+          echo ""
+          echo "Current realmlist:"
+          docker exec ac-database mysql \
+            -uroot -p"{{.DB_PASS}}" \
+            -e "SELECT id, name, address, port FROM acore_auth.realmlist ORDER BY id;" \
+            2>/dev/null | column -t
+          exit 1
+        fi
+        docker exec ac-database mysql \
+          -uroot -p"{{.DB_PASS}}" \
+          -e "UPDATE acore_auth.realmlist SET address = '{{.ADDR}}' WHERE id = {{.REALM}};" \
+          2>/dev/null
+        echo "Realm {{.REALM}} address set to: {{.ADDR}}"
+
+  soap:check:
+    desc: "Check SOAP connection for a realm: task realm:soap:check [REALM=1|2]"
+    vars:
+      REALM: '{{.REALM | default "1"}}'
+    cmds:
+      - |
+        port="7878"
+        case "{{.REALM}}" in
+          2|pb|playerbots)
+            port=$(grep -E '^DOCKER_PB_SOAP_EXTERNAL_PORT=' .env 2>/dev/null | cut -d= -f2- || true)
+            port="${port:-7879}"
+            ;;
+          *)
+            port=$(grep -E '^DOCKER_SOAP_EXTERNAL_PORT=' .env 2>/dev/null | cut -d= -f2- || true)
+            port="${port:-7878}"
+            ;;
+        esac
+        task admin:soap-check PORT="$port"

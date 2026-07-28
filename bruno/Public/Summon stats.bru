@@ -1,0 +1,36 @@
+meta {
+  name: Summon stats
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/summons
+  body: none
+  auth: none
+}
+
+tests {
+  test("responds without a session", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().total).to.be.a("number");
+  });
+
+  test("leaderboard rows carry a name and a count", function () {
+    const top = res.getBody().top;
+    if (top.length > 0) {
+      expect(top[0].name).to.be.a("string");
+      expect(top[0].summons).to.be.a("number");
+    }
+  });
+}
+
+docs {
+  The realm's summon counter, the top summoners, and what a summon currently
+  pays. Powers the Summons card on the homepage.
+
+  Loading this also settles the payout queue: nothing schedules the sweep that
+  turns summon_events rows into shop points, so the routes people open are what
+  runs it. That makes the request a write as well as a read — it is idempotent,
+  and a summon can never be paid twice.
+}

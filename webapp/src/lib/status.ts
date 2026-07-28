@@ -10,6 +10,7 @@ export interface ServerStatus {
   worldOnline: boolean;
   playersOnline: number | null;
   uptimeSeconds: number | null;
+  zerotierNetworkId: string | null;
 }
 
 function probe(host: string, port: number, timeoutMs = 1500): Promise<boolean> {
@@ -39,6 +40,7 @@ export async function getServerStatus(): Promise<ServerStatus> {
     worldOnline: false,
     playersOnline: null,
     uptimeSeconds: null,
+    zerotierNetworkId: process.env.ZEROTIER_NETWORK_ID?.trim() || null,
   };
 
   const [authOnline, worldOnline] = await Promise.all([

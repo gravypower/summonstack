@@ -1,0 +1,42 @@
+meta {
+  name: Set summon bounty
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/admin/summons/bonus
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "username": "{{playerUser}}",
+    "multiplierPct": 100,
+    "note": "set by the Bruno collection"
+  }
+}
+
+tests {
+  test("saves the multiplier", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().bonuses).to.be.an("array");
+  });
+}
+
+docs {
+  Puts a multiplier on an account: summoning any of **its** characters pays the
+  summoner `multiplierPct`% of the usual points. 200 is double, 0 makes
+  summoning that account worth nothing, and the ceiling is 1000 (10×).
+
+  The multiplier is on the *summoned* account — it does nothing for that
+  account's own summons.
+
+  Sent as `100` here (the normal rate) so running the collection cannot quietly
+  leave a bounty on the realm — it does leave a visible `1×` row in the panel
+  that you can Remove. Delete one with
+  `DELETE {{baseUrl}}/api/admin/summons/bonus?accountId=<id>`; the current list
+  comes back on the response of either call, and also from
+  `Admin / Get summon rewards`.
+}

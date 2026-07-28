@@ -24,6 +24,18 @@ export async function GET(): Promise<Response> {
             p.delivery_type === "level_boost"
               ? Number(payload.level) || null
               : null,
+          // "release" lifts a lock; "lock" applies one, at payload.level or
+          // (null) wherever the character stands.
+          lockAction:
+            p.delivery_type === "xp_lock"
+              ? payload.action === "release"
+                ? "release"
+                : "lock"
+              : null,
+          lockLevel:
+            p.delivery_type === "xp_lock" && payload.level != null
+              ? Number(payload.level)
+              : null,
           pack,
           minLevel: pack ? packInfo[pack]?.minLevel ?? null : null,
           specsByClass: pack ? packInfo[pack]?.specsByClass ?? {} : null,
