@@ -59,7 +59,7 @@ function rowToEvent(row: RowDataPacket): XpEvent {
   };
 }
 
-export async function getXpEvent(): Promise<XpEvent> {
+export async function getXpEvent(realmId: number = 1): Promise<XpEvent> {
   const pool = getPool();
   // Activeness and the heartbeat are evaluated by MySQL so they use the same
   // clock the Lua script compares against.
@@ -69,8 +69,8 @@ export async function getXpEvent(): Promise<XpEvent> {
             (enabled = 1 AND (ends_at IS NULL OR ends_at > NOW())) AS active,
             (seen_at IS NOT NULL AND seen_at > NOW() - INTERVAL ? SECOND)
               AS seen_recently
-       FROM \`${WEB_DB}\`.xp_event WHERE id = 1`,
-    [HEARTBEAT_SECONDS]
+       FROM \`${WEB_DB}\`.xp_event WHERE id = ?`,
+    [HEARTBEAT_SECONDS, realmId]
   );
   return rows[0] ? rowToEvent(rows[0]) : DEFAULTS;
 }
@@ -136,7 +136,8 @@ export function validateXpEvent(update: XpEventUpdate): ValidationIssue[] {
 
 export async function saveXpEvent(
   update: XpEventUpdate,
-  username: string
+  username: string,
+  realmId: number = 1
 ): Promise<XpEvent> {
   const pool = getPool();
   // A duration is relative to the save, so re-saving an already running event
@@ -155,13 +156,14 @@ export async function saveXpEvent(
     params.push(Math.round(update.endsInHours * 60));
   }
   params.push(username.slice(0, 32));
+  params.push(realmId);
 
   await pool.query(
     `UPDATE \`${WEB_DB}\`.xp_event
         SET name = ?, enabled = ?, multiplier_pct = ?, aura_spell = ?,
             ends_at = ${endsAt}, updated_by = ?, updated_at = NOW()
-      WHERE id = 1`,
+      WHERE id = ?`,
     params
   );
-  return getXpEvent();
+  return getXpEvent(realmId);
 }

@@ -6,3 +6,17 @@ ChromieCraft_3.3.5a.zip
 
 # Large local test artifacts for the download server.
 downloads/files/*.bin
+
+# The worldserver entrypoint drops the shipped module defaults here on every
+# start. Kept out of git so the reference always matches the running image.
+worldserver/modules/*.dist
+
+# Rendered from realms.yml by `task realm:render`.
+docker-compose.override.yml
+webapp/generated/realms.json
+
+__pycache__/
+.summonstack.lock
+
+# Written into worldserver/modules/ by the playerbots entrypoint at runtime.
+worldserver/modules/playerbots.conf

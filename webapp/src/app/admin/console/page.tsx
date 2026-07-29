@@ -15,13 +15,34 @@ const QUICK_COMMANDS: { label: string; command: string }[] = [
   { label: "Save all", command: "saveall" },
 ];
 
+interface RealmItem {
+  id: number;
+  name: string;
+}
+
 export default function AdminConsolePage() {
   const [command, setCommand] = useState("");
   const [entries, setEntries] = useState<Entry[]>([]);
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [realms, setRealms] = useState<RealmItem[]>([]);
+  const [selectedRealmId, setSelectedRealmId] = useState<number>(1);
   const outputRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    fetch("/api/realms")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.realms && Array.isArray(data.realms)) {
+          setRealms(data.realms);
+          if (data.realms[0]) {
+            setSelectedRealmId(data.realms[0].id);
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     outputRef.current?.scrollTo(0, outputRef.current.scrollHeight);
@@ -37,13 +58,13 @@ export default function AdminConsolePage() {
     const res = await fetch("/api/admin/soap", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ command: trimmed }),
+      body: JSON.stringify({ command: trimmed, realmId: selectedRealmId }),
     });
     const data = await res.json().catch(() => ({}));
     setEntries((prev) => [
       ...prev,
       {
-        command: trimmed,
+        command: `[Realm ${selectedRealmId}] ${trimmed}`,
         output: data.output ?? data.error ?? "Request failed.",
         success: res.ok && Boolean(data.success),
       },
@@ -77,6 +98,23 @@ export default function AdminConsolePage() {
         <span className="mono">teleport name $player $location</span>. Type{" "}
         <span className="mono">help</span> for a list.
       </p>
+
+      {realms.length > 1 && (
+        <div className="field" style={{ marginBottom: "1rem" }}>
+          <span>Target Realm</span>
+          <select
+            className="input"
+            value={selectedRealmId}
+            onChange={(e) => setSelectedRealmId(Number(e.target.value))}
+          >
+            {realms.map((r) => (
+              <option key={r.id} value={r.id}>
+                Realm {r.id}: {r.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="row" style={{ marginBottom: "0.75rem" }}>
         {QUICK_COMMANDS.map((qc) => (

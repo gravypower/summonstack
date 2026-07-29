@@ -10,6 +10,8 @@ interface Character {
   class: number;
   level: number;
   online: boolean;
+  realm_id?: number;
+  realm_name?: string;
   /** Level this character's XP is held at, or null if it still levels. */
   xpLockedAt: number | null;
 }
@@ -305,6 +307,7 @@ export default function ShopPage() {
                           value={c.guid}
                           disabled={reason !== null}
                         >
+                          {c.realm_name ? `[${c.realm_name}] ` : ""}
                           {c.name} — {CLASS_NAMES[c.class] ?? "?"} {c.level}
                           {reason
                             ? ` (${reason})`

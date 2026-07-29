@@ -25,9 +25,21 @@
   console forces it.
 ]]
 
--- Must match WEB_DB and CHARS_DB in docker-compose.yml.
+-- Must match WEB_DB in docker-compose.yml.
 local WEB_DB = "summonstack_web"
-local CHARS_DB = "acore_characters"
+
+-- Which realm this worldserver is, stamped on every row so summons can be
+-- attributed to the realm they happened on. Every realm runs this same script
+-- from the same shared lua_scripts mount, so it cannot be a constant.
+-- Falls back to 1 if the engine does not expose it, which is the id the column
+-- defaulted to before rows were realm-scoped.
+local REALM_ID = (type(GetRealmID) == "function" and GetRealmID()) or 1
+
+-- There is deliberately no CHARS_DB constant. The character database differs
+-- per realm (acore_characters, acore_characters_3, acore_characters_pb_4 …),
+-- so the row below is written with CharDBExecute, whose connection is already
+-- bound to whichever one this realm uses. A hardcoded name here looked up
+-- another realm's characters table and credited the wrong account, or none.
 
 -- How often to re-read the panel's settings row and the realm total.
 local POLL_SECONDS = 15
@@ -95,6 +107,41 @@ local function safeName(name)
   return type(name) == "string" and #name <= 12 and name:match("^%a+$") ~= nil
 end
 
+-- ── Playerbots ─────────────────────────────────────────────────────────────
+
+-- On a playerbots realm most "players" are bots, and up to MaxRandomBots of
+-- them summon each other constantly. Left alone they would dominate the ledger
+-- and pay out points to the accounts that own them, so their summons are
+-- recorded for the audit trail but never awarded.
+--
+-- Random bots live on accounts named with this prefix — mod-playerbots'
+-- AiPlayerbot.RandomBotAccountPrefix, whose default is "rndbot". Change it here
+-- if you change it there; a Lua script cannot read the module's config.
+-- Characters a player adds as bots themselves sit on that player's own
+-- account and are deliberately not caught by this.
+local BOT_ACCOUNT_PREFIX = "rndbot"
+
+-- account id → true/false. Accounts are never renamed in practice and the
+-- alternative is an auth query per summon.
+local botAccounts = {}
+
+local function isBotAccount(accountId)
+  if accountId == nil or accountId == 0 then
+    return false
+  end
+  local known = botAccounts[accountId]
+  if known ~= nil then
+    return known
+  end
+  local query = AuthDBQuery(string.format(
+    "SELECT username FROM account WHERE id = %u", accountId))
+  local username = query and query:GetString(0) or nil
+  local isBot = username ~= nil
+    and username:lower():sub(1, #BOT_ACCOUNT_PREFIX) == BOT_ACCOUNT_PREFIX
+  botAccounts[accountId] = isBot
+  return isBot
+end
+
 -- ── Settings ───────────────────────────────────────────────────────────────
 
 local function refresh()
@@ -111,8 +158,15 @@ local function refresh()
     state.announceEvery = query:GetUInt32(2)
   end
 
+  -- Scoped to this realm: the milestone this feeds is announced as "Summon #N
+  -- on the realm", so counting every realm's rows would overstate it and make
+  -- each realm announce at points that mean nothing to the players there.
+  -- Playerbot summons are excluded for the same reason — they are logged for
+  -- the audit trail, not because a player did anything.
   local counted = WorldDBQuery(string.format(
-    "SELECT COUNT(*) FROM `%s`.summon_events", WEB_DB))
+    "SELECT COUNT(*) FROM `%s`.summon_events " ..
+    "WHERE realm_id = %u AND (skip_reason IS NULL OR skip_reason <> 'playerbot')",
+    WEB_DB, REALM_ID))
   if counted then
     state.total = counted:GetUInt32(0)
   end
@@ -156,22 +210,46 @@ local function record(offer, targetGuid, targetName, summoner, targetAccount)
     return
   end
 
+  -- A summon involving a random bot on either side is logged but never paid.
+  local bot = isBotAccount(offer.summonerAccount) or isBotAccount(targetAccount)
+  local awardState = (state.enabled and not bot) and "pending" or "skipped"
+  local skipReason = "NULL"
+  if bot then
+    skipReason = "'playerbot'"
+  elseif not state.enabled then
+    skipReason = "'rewards_off'"
+  end
+
   -- target_account comes from the characters row rather than the client, and
   -- the SELECT is also the existence check: a character deleted mid-summon
   -- simply inserts nothing.
-  WorldDBExecute(string.format(
+  --
+  -- Run on the character connection so `characters` resolves to this realm's
+  -- own database, with the web database named explicitly. Written this way
+  -- rather than as two statements so the account lookup and the insert stay a
+  -- single atomic statement, as they were before.
+  CharDBExecute(string.format(
     "INSERT INTO `%s`.summon_events " ..
-    "(summoner_guid, summoner_name, summoner_account, target_guid, target_name, " ..
-    " target_account, spell, map, zone, award_state, skip_reason) " ..
-    "SELECT %u, '%s', %u, %u, '%s', c.account, %u, %u, %u, '%s', %s " ..
-    "FROM `%s`.characters c WHERE c.guid = %u",
+    "(realm_id, summoner_guid, summoner_name, summoner_account, target_guid, " ..
+    " target_name, target_account, spell, map, zone, award_state, skip_reason) " ..
+    "SELECT %u, %u, '%s', %u, %u, '%s', c.account, %u, %u, %u, '%s', %s " ..
+    "FROM characters c WHERE c.guid = %u",
     WEB_DB,
+    REALM_ID,
     offer.summonerGuid, offer.summonerName, offer.summonerAccount,
     targetGuid, targetName,
     offer.spell, offer.map, offer.zone,
-    state.enabled and "pending" or "skipped",
-    state.enabled and "NULL" or "'rewards_off'",
-    CHARS_DB, targetGuid))
+    awardState,
+    skipReason,
+    targetGuid))
+
+  -- Bot summons are recorded but do not move the counter, and nobody is told
+  -- about them: on a realm with a couple of hundred random bots they would
+  -- otherwise drown out the milestone and spam every player with world
+  -- announcements about summons no person performed.
+  if bot then
+    return
+  end
 
   state.total = state.total + 1
 

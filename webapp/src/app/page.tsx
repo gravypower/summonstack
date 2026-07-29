@@ -49,16 +49,18 @@ export default async function HomePage() {
     : "set realmlist 127.0.0.1";
 
   const isZeroTierEnabled = Boolean(status.zerotierNetworkId);
+  const realmsList = status.realms && status.realms.length > 0 ? status.realms : [];
 
   return (
     <>
-      <h1>{status.realmName ?? "SummonStack"}</h1>
+      <h1>SummonStack</h1>
       <p className="muted">
-        A private World of Warcraft — Wrath of the Lich King (3.3.5a) realm.
+        A private World of Warcraft — Wrath of the Lich King (3.3.5a) server.
         Registration is invite-only: ask an admin for an invite link.
       </p>
 
-      <div className="grid">
+      <h2>Realms Status</h2>
+      <div className="grid" style={{ marginBottom: "1.5rem" }}>
         <div className="card stat">
           <div className="label">Login Server</div>
           <div className={`value ${status.authOnline ? "status-up" : "status-down"}`}>
@@ -66,27 +68,45 @@ export default async function HomePage() {
           </div>
         </div>
         <div className="card stat">
-          <div className="label">World Server</div>
-          <div className={`value ${status.worldOnline ? "status-up" : "status-down"}`}>
-            {status.worldOnline ? "Online" : "Offline"}
-          </div>
+          <div className="label">Active Realms</div>
+          <div className="value">{realmsList.length || 1}</div>
         </div>
         <div className="card stat">
-          <div className="label">Players Online</div>
+          <div className="label">Total Players Online</div>
           <div className="value">
-            {status.playersOnline !== null ? status.playersOnline : "—"}
-          </div>
-        </div>
-        <div className="card stat">
-          <div className="label">Uptime</div>
-          <div className="value">
-            {status.uptimeSeconds !== null ? formatUptime(status.uptimeSeconds) : "—"}
+            {realmsList.reduce((acc, r) => acc + (r.playersOnline ?? 0), 0) || status.playersOnline || "0"}
           </div>
         </div>
         <div className="card stat">
           <div className="label">Summons</div>
           <div className="value">{summons ? summons.total : "—"}</div>
         </div>
+      </div>
+
+      <div className="grid" style={{ marginBottom: "2rem" }}>
+        {realmsList.map((r) => (
+          <div key={r.id} className="card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+              <h3 style={{ margin: 0 }}>⚔ {r.name}</h3>
+              <span className={`pill ${r.worldOnline ? "green" : "red"}`}>
+                {r.worldOnline ? "Online" : "Offline"}
+              </span>
+            </div>
+            <p className="muted" style={{ fontSize: "0.9rem", margin: "0 0 1rem 0" }}>
+              Realm ID: {r.id} • {r.address}:{r.port}
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+              <div>
+                <span className="muted" style={{ fontSize: "0.85rem" }}>Players: </span>
+                <strong>{r.playersOnline !== null ? r.playersOnline : "—"}</strong>
+              </div>
+              <div>
+                <span className="muted" style={{ fontSize: "0.85rem" }}>Uptime: </span>
+                <strong>{r.uptimeSeconds !== null ? formatUptime(r.uptimeSeconds) : "—"}</strong>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
 
       <div className="card">

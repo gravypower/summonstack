@@ -1,0 +1,146 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# SummonStack — Playerbots Worldserver + ALE (the AzerothCore Lua Engine)
+#
+# Deliberately separate from ./Dockerfile rather than a flag inside it. ALE
+# hooks deep into core internals and mod-playerbots builds against a fork of
+# AzerothCore that tracks upstream on its own schedule, so this may fail to
+# compile where the plain playerbots build succeeds. Keeping it apart means a
+# failure here never costs you a working playerbots image.
+#
+# The builder stage below is a deliberate line-for-line copy of ./Dockerfile's,
+# up to and including the first install. That is not redundancy for its own
+# sake: identical instructions hit BuildKit's existing cache, so the core is not
+# recompiled and no extra image has to be materialised on disk. Only the steps
+# after the marker are new, and they rebuild incrementally.
+#
+# Keep the copied section in step with ./Dockerfile. If they drift, the cache
+# misses and this build recompiles the core from scratch (30-60 minutes) rather
+# than failing, so drift costs time and disk, not correctness.
+#
+# Build args:
+#   ACORE_BRANCH branch of mod-playerbots/azerothcore-wotlk     (default: Playerbot)
+#   PB_BRANCH    branch of mod-playerbots/mod-playerbots        (default: master)
+#   ALE_BRANCH   branch of azerothcore/mod-ale                  (default: master)
+#   LUA_VERSION  lua52 | lua53 | lua54 | luajit                 (default: lua52)
+#   BUILD_JOBS   parallel jobs passed to cmake --build          (default: nproc)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Stage 1: Builder ──────────────────────────────────────────────────────────
+FROM ubuntu:22.04 AS builder
+
+ARG ACORE_BRANCH=Playerbot
+ARG PB_BRANCH=master
+ARG BUILD_JOBS
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates git cmake make clang \
+        libssl-dev default-libmysqlclient-dev libreadline-dev \
+        zlib1g-dev libbz2-dev libncurses-dev \
+        libboost-system-dev libboost-filesystem-dev libboost-thread-dev \
+        libboost-program-options-dev libboost-iostreams-dev libboost-regex-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clone AzerothCore playerbots fork
+RUN git clone --depth=1 \
+        --branch="${ACORE_BRANCH}" \
+        https://github.com/mod-playerbots/azerothcore-wotlk.git \
+        /azerothcore
+
+# Clone mod-playerbots into the modules directory
+RUN git clone --depth=1 \
+        --branch="${PB_BRANCH}" \
+        https://github.com/mod-playerbots/mod-playerbots.git \
+        /azerothcore/modules/mod-playerbots
+
+# Copy module SQL into AzerothCore's custom SQL directories so they are
+# included when the worldserver self-populates the databases on first start.
+# Per the mod-playerbots Docker Installation Guide:
+#   cp modules/mod-playerbots/sql/characters/base/*.sql data/sql/custom/db_characters/
+#   cp modules/mod-playerbots/sql/world/base/*.sql      data/sql/custom/db_world/
+RUN mkdir -p /azerothcore/data/sql/custom/db_characters \
+             /azerothcore/data/sql/custom/db_world && \
+    find /azerothcore/modules/mod-playerbots/sql/characters/base -name '*.sql' \
+         -exec cp {} /azerothcore/data/sql/custom/db_characters/ \; 2>/dev/null || true && \
+    find /azerothcore/modules/mod-playerbots/sql/world/base -name '*.sql' \
+         -exec cp {} /azerothcore/data/sql/custom/db_world/ \; 2>/dev/null || true
+
+WORKDIR /azerothcore
+
+# Configure.
+# -DWITH_WARNINGS=0 suppresses thousands of cosmetic warnings from mod-playerbots,
+# substantially speeding up compilation output (user tip).
+# -DTOOLS_BUILD=none skips map-extraction tools (client data already extracted).
+RUN cmake . -B build \
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DCMAKE_C_COMPILER=clang \
+        -DCMAKE_CXX_COMPILER=clang++ \
+        -DWITH_WARNINGS=0 \
+        -DTOOLS_BUILD=none \
+        -DSCRIPTS=static \
+        -DMODULES=static
+
+# Compile — takes 30-60 minutes on first build; cached by Docker after that.
+RUN cmake --build build -j${BUILD_JOBS:-$(nproc)} \
+    && cmake --install build --prefix /azerothcore/env/dist
+
+# ── Everything below is what ./Dockerfile does not do ────────────────────────
+
+ARG ALE_BRANCH=master
+# lua52 matches the official acore worldserver image, which statically links
+# Lua 5.2.4 — so scripts behave the same on every realm. It is also mod-ale's
+# default and vendors its own Lua, needing no extra apt packages. luajit is
+# faster but would need libluajit-5.1-dev added to the apt list above.
+ARG LUA_VERSION=lua52
+
+RUN git clone --depth=1 \
+        --branch="${ALE_BRANCH}" \
+        https://github.com/azerothcore/mod-ale.git \
+        /azerothcore/modules/mod-ale
+
+# Re-configure so cmake sees the new module, then build into the same directory
+# the step above left behind: the core's object files are still there, so this
+# compiles mod-ale and relinks rather than starting over.
+RUN cmake . -B build \
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DCMAKE_C_COMPILER=clang \
+        -DCMAKE_CXX_COMPILER=clang++ \
+        -DWITH_WARNINGS=0 \
+        -DTOOLS_BUILD=none \
+        -DSCRIPTS=static \
+        -DMODULES=static \
+        -DLUA_VERSION=${LUA_VERSION} \
+    && cmake --build build -j${BUILD_JOBS:-$(nproc)} \
+    && cmake --install build --prefix /azerothcore/env/dist
+
+# ── Stage 2: Worldserver runtime ─────────────────────────────────────────────
+FROM ubuntu:22.04 AS worldserver
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Runtime libraries — versions match Ubuntu 22.04 build-time packages.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        default-mysql-client libssl3 libmysqlclient21 libreadline8 libncurses6 \
+        libboost-system1.74.0 libboost-filesystem1.74.0 libboost-thread1.74.0 \
+        libboost-program-options1.74.0 libboost-iostreams1.74.0 libboost-regex1.74.0 \
+        libboost-atomic1.74.0 libboost-chrono1.74.0 libboost-date-time1.74.0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Compiled binaries and config templates — env/dist now also carries
+# mod_ale.conf.dist, which the etc/modules mount configures.
+COPY --from=builder /azerothcore/env/dist /azerothcore/env/dist
+
+# SQL source tree — worldserver reads this at startup to self-populate DBs.
+COPY --from=builder /azerothcore/data    /azerothcore/data
+COPY --from=builder /azerothcore/modules /azerothcore/modules
+
+WORKDIR /azerothcore
+
+COPY entrypoint-worldserver.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# 8085 — game traffic  |  7878 — SOAP API (internal only, host-bound in compose)
+EXPOSE 8085 7878
+
+ENTRYPOINT ["/entrypoint.sh"]

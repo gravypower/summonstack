@@ -34,6 +34,7 @@ export async function POST(req: Request): Promise<Response> {
       accountId: session.accountId,
       productSlug: String(body.productSlug ?? ""),
       characterGuid: Number(body.characterGuid),
+      realmId: typeof body.realmId === "number" ? body.realmId : undefined,
       spec: typeof body.spec === "string" && body.spec ? body.spec : null,
       idempotencyKey,
     });

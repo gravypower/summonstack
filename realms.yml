@@ -1,0 +1,41 @@
+# SummonStack realm manifest — the single source of truth for what realms exist.
+#
+# Everything downstream is derived from this file:
+#   docker-compose.override.yml   generated  (task realm:render)
+#   acore_auth.realmlist          written by task realm:add / realm:remove
+#   the portal's per-realm config still guesses from the id — phase 3 moves it here
+#
+# Ports may use the ${VAR:-default} syntax, so a value lives in .env once
+# instead of being copied here and drifting.
+#
+#   managed: compose    declared by hand in docker-compose.yml
+#   managed: generated  rendered into docker-compose.override.yml
+#   enabled: false      declared but not meant to be running or in realmlist
+#
+# NOTE: `task realm:add` and `task realm:remove` rewrite this file. The header
+# survives; comments you add further down do not.
+
+version: 1
+defaults:
+  address: 192.168.140.88
+realms:
+- id: 1
+  name: AzerothCore
+  type: normal
+  service: ac-worldserver
+  managed: compose
+  game_port: ${DOCKER_WORLD_EXTERNAL_PORT:-8085}
+  soap_port: ${DOCKER_SOAP_EXTERNAL_PORT:-7878}
+  world_db: acore_world
+  chars_db: acore_characters
+- id: 2
+  name: Playerbots
+  type: playerbots
+  service: ac-pb-worldserver
+  managed: compose
+  enabled: false
+  game_port: ${DOCKER_PB_WORLD_EXTERNAL_PORT:-8086}
+  soap_port: ${DOCKER_PB_SOAP_EXTERNAL_PORT:-7879}
+  world_db: acore_world_pb
+  chars_db: acore_characters_pb
+  profile: playerbots

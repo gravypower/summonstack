@@ -1,6 +1,7 @@
 import { promises as dns } from "node:dns";
 import type { ResultSetHeader, RowDataPacket } from "mysql2";
 import { AUTH_DB, getPool } from "./db";
+import { manifestRealm } from "./realm-manifest";
 
 export interface Realm {
   id: number;
@@ -265,3 +266,91 @@ export async function updateRealm(update: RealmUpdate): Promise<void> {
     ]
   );
 }
+
+export interface RealmConfig extends Realm {
+  charsDb: string;
+  worldDb: string;
+  soapUrl: string;
+  worldHost: string;
+  worldPort: number;
+}
+
+/**
+ * Where a realm's databases and worldserver live.
+ *
+ * Three sources, most specific first: an explicit REALM_<id>_* environment
+ * override, the realm manifest exported from realms.yml, then the legacy
+ * defaults. The legacy branch only ever knew realms 1 and 2 — for anything else
+ * it guessed `ac-realm${id}-worldserver` while the compose generator produced
+ * `ac-realm-${id}`, so the portal could not reach a realm it had not been
+ * special-cased for. It is kept only so a portal running without the manifest
+ * mounted behaves exactly as it did before.
+ */
+export function getRealmConfig(realm: Realm): RealmConfig {
+  const id = realm.id;
+  const override = (suffix: string) =>
+    process.env[`REALM_${id}_${suffix}`]?.trim() || undefined;
+  const entry = manifestRealm(id);
+
+  const legacy = legacyRealmConfig(id);
+
+  const worldPortOverride = override("WORLD_PORT");
+  return {
+    ...realm,
+    charsDb: override("CHARS_DB") || entry?.charsDb || legacy.charsDb,
+    worldDb: override("WORLD_DB") || entry?.worldDb || legacy.worldDb,
+    soapUrl: override("SOAP_URL") || entry?.soapUrl || legacy.soapUrl,
+    worldHost: override("WORLD_HOST") || entry?.worldHost || legacy.worldHost,
+    worldPort: worldPortOverride
+      ? Number(worldPortOverride)
+      : entry?.worldPort || legacy.worldPort,
+  };
+}
+
+interface RealmEndpoints {
+  charsDb: string;
+  worldDb: string;
+  soapUrl: string;
+  worldHost: string;
+  worldPort: number;
+}
+
+function legacyRealmConfig(id: number): RealmEndpoints {
+  if (id === 1) {
+    return {
+      charsDb: process.env.CHARS_DB || "acore_characters",
+      worldDb: process.env.WORLD_DB || "acore_world",
+      soapUrl: process.env.SOAP_URL || "http://ac-worldserver:7878",
+      worldHost: process.env.WORLD_HOST || "ac-worldserver",
+      worldPort: Number(process.env.WORLD_PORT || 8085),
+    };
+  }
+  if (id === 2) {
+    return {
+      charsDb: process.env.CHARS_DB_PB || "acore_characters_pb",
+      worldDb: process.env.WORLD_DB_PB || "acore_world_pb",
+      soapUrl: process.env.SOAP_URL_PB || "http://ac-pb-worldserver:7878",
+      worldHost: process.env.WORLD_HOST_PB || "ac-pb-worldserver",
+      worldPort: Number(process.env.WORLD_PORT_PB || 8085),
+    };
+  }
+  return {
+    charsDb: `acore_characters_${id}`,
+    worldDb: `acore_world_${id}`,
+    soapUrl: `http://ac-realm${id}-worldserver:7878`,
+    worldHost: `ac-realm${id}-worldserver`,
+    worldPort: 8085,
+  };
+}
+
+export async function listRealmsWithConfig(): Promise<RealmConfig[]> {
+  const realms = await listRealms();
+  return realms.map(getRealmConfig);
+}
+
+export async function getRealmConfigById(id: number): Promise<RealmConfig | null> {
+  const realm = await getRealm(id);
+  if (!realm) return null;
+  return getRealmConfig(realm);
+}
+

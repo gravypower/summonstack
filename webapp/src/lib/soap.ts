@@ -26,12 +26,24 @@ export interface SoapResult {
   unreachable?: boolean;
 }
 
+import { getRealmConfigById } from "./realm";
+
 /**
  * Run a worldserver console command over the SOAP API.
  * Requires SOAP_USER/SOAP_PASS to be a gmlevel-3 account.
  */
-export async function soapCommand(command: string): Promise<SoapResult> {
-  const url = process.env.SOAP_URL || "http://ac-worldserver:7878";
+export async function soapCommand(
+  command: string,
+  realmId?: number
+): Promise<SoapResult> {
+  let url = process.env.SOAP_URL || "http://ac-worldserver:7878";
+  if (realmId) {
+    const realmConfig = await getRealmConfigById(realmId).catch(() => null);
+    if (realmConfig?.soapUrl) {
+      url = realmConfig.soapUrl;
+    }
+  }
+
   const user = process.env.SOAP_USER || "";
   const pass = process.env.SOAP_PASS || "";
   if (!user || !pass) {

@@ -108,10 +108,11 @@ const DDL = [
   `CREATE TABLE IF NOT EXISTS \`${WEB_DB}\`.shop_xp_locks (
      character_guid INT UNSIGNED NOT NULL,
      account_id INT UNSIGNED NOT NULL,
+     realm_id INT UNSIGNED NOT NULL DEFAULT 1,
      target_level TINYINT UNSIGNED NOT NULL,
      locked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
      released_at DATETIME NULL,
-     PRIMARY KEY (character_guid),
+     PRIMARY KEY (realm_id, character_guid),
      KEY idx_active (released_at)
    ) ENGINE=InnoDB`,
   // 'bag' and 'xp_lock' were added after the first installs; CREATE TABLE IF

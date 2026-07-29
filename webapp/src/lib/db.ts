@@ -1,4 +1,5 @@
 import mysql from "mysql2/promise";
+import type { RowDataPacket } from "mysql2";
 
 export const AUTH_DB = process.env.AUTH_DB || "acore_auth";
 export const CHARS_DB = process.env.CHARS_DB || "acore_characters";
@@ -118,13 +119,18 @@ const SHOP_DDL = [
   // One row per character ever locked, read every few seconds by
   // worldserver/lua_scripts/xp.lua. released_at IS NULL means the lock is
   // live; releasing keeps the row so the history survives a re-lock.
+  //
+  // Keyed by realm as well as guid: character guids restart at 1 in every
+  // character database, so guid 5 on one realm and guid 5 on another are
+  // different characters and must be able to hold locks independently.
   `CREATE TABLE IF NOT EXISTS \`__WEB_DB__\`.shop_xp_locks (
      character_guid INT UNSIGNED NOT NULL,
      account_id INT UNSIGNED NOT NULL,
+     realm_id INT UNSIGNED NOT NULL DEFAULT 1,
      target_level TINYINT UNSIGNED NOT NULL,
      locked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
      released_at DATETIME NULL,
-     PRIMARY KEY (character_guid),
+     PRIMARY KEY (realm_id, character_guid),
      KEY idx_active (released_at)
    ) ENGINE=InnoDB`,
 ];
@@ -229,9 +235,9 @@ export async function ensureWebDb(): Promise<void> {
         await pool.query(ddl.replaceAll("__WEB_DB__", WEB_DB));
       }
       await pool.query(
-        `INSERT IGNORE INTO \`${WEB_DB}\`.summon_rewards (id) VALUES (1)`
+        `INSERT IGNORE INTO \`${WEB_DB}\`.summon_rewards (id) VALUES (1), (2)`
       );
-      // Single row, read by worldserver/lua_scripts/xp.lua.
+      // Single row per realm, read by worldserver/lua_scripts/xp.lua.
       // updated_at is written explicitly rather than ON UPDATE: the Lua script
       // touches seen_at every few seconds and must not look like an edit.
       await pool.query(
@@ -249,8 +255,44 @@ export async function ensureWebDb(): Promise<void> {
          ) ENGINE=InnoDB`
       );
       await pool.query(
-        `INSERT IGNORE INTO \`${WEB_DB}\`.xp_event (id) VALUES (1)`
+        `INSERT IGNORE INTO \`${WEB_DB}\`.xp_event (id) VALUES (1), (2)`
       );
+      // Migrations for multi-realm support
+      try {
+        await pool.query(
+          `ALTER TABLE \`${WEB_DB}\`.shop_xp_locks ADD COLUMN realm_id INT UNSIGNED NOT NULL DEFAULT 1 AFTER account_id`
+        );
+      } catch {}
+      try {
+        await pool.query(
+          `ALTER TABLE \`${WEB_DB}\`.shop_transactions ADD COLUMN realm_id INT UNSIGNED NOT NULL DEFAULT 1 AFTER account_id`
+        );
+      } catch {}
+      try {
+        await pool.query(
+          `ALTER TABLE \`${WEB_DB}\`.summon_events ADD COLUMN realm_id INT UNSIGNED NOT NULL DEFAULT 1 AFTER id`
+        );
+      } catch {}
+      // Widen the lock key to include the realm. Must run after the realm_id
+      // column exists above. While the key was character_guid alone, a second
+      // realm's character with the same guid collided with the first realm's
+      // row instead of getting one of its own — so a lock bought on one realm
+      // silently overwrote an unrelated character's lock on another.
+      try {
+        const [pk] = await pool.query<RowDataPacket[]>(
+          `SELECT COUNT(*) AS n FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'shop_xp_locks'
+              AND INDEX_NAME = 'PRIMARY'`,
+          [WEB_DB]
+        );
+        // One column in the primary key means it is still the old guid-only key.
+        if (Number(pk[0]?.n ?? 0) === 1) {
+          await pool.query(
+            `ALTER TABLE \`${WEB_DB}\`.shop_xp_locks
+               DROP PRIMARY KEY, ADD PRIMARY KEY (realm_id, character_guid)`
+          );
+        }
+      } catch {}
     })().catch((err) => {
       global.__ssWebDbReady = undefined;
       throw err;

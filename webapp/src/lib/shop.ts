@@ -11,6 +11,7 @@
 import type { ResultSetHeader, RowDataPacket } from "mysql2";
 import { HttpError } from "./auth";
 import { AUTH_DB, CHARS_DB, WEB_DB, ensureWebDb, getPool } from "./db";
+import { getRealmConfigById, listRealmsWithConfig } from "./realm";
 import { soapCommand } from "./soap";
 
 /** AC character names are plain letters; this also guards SOAP interpolation. */
@@ -44,13 +45,15 @@ interface ProductRow extends RowDataPacket {
   payload: unknown;
 }
 
-interface CharacterRow extends RowDataPacket {
+export interface CharacterRow extends RowDataPacket {
   guid: number;
   name: string;
   race: number;
   class: number;
   level: number;
   online: number;
+  realm_id: number;
+  realm_name: string;
 }
 
 export interface TxnRow extends RowDataPacket {
@@ -61,6 +64,7 @@ export interface TxnRow extends RowDataPacket {
   price_paid: number;
   character_guid: number;
   character_name: string;
+  realm_id: number;
   payload_snapshot: unknown;
   status: "pending" | "delivering" | "delivered" | "failed" | "refunded";
   attempts: number;
@@ -101,44 +105,71 @@ export async function getBalance(accountId: number): Promise<number> {
 }
 
 export async function listCharacters(accountId: number): Promise<CharacterRow[]> {
-  const [rows] = await getPool().query<CharacterRow[]>(
-    `SELECT guid, name, race, class, level, online
-       FROM \`${CHARS_DB}\`.characters
-      WHERE account = ? AND deleteInfos_Account IS NULL
-      ORDER BY level DESC, name`,
-    [accountId]
-  );
-  return rows;
+  const realms = await listRealmsWithConfig();
+  const pool = getPool();
+  const allCharacters: CharacterRow[] = [];
+
+  for (const r of realms) {
+    try {
+      const [rows] = await pool.query<RowDataPacket[]>(
+        `SELECT guid, name, race, class, level, online
+           FROM \`${r.charsDb}\`.characters
+          WHERE account = ? AND deleteInfos_Account IS NULL
+          ORDER BY level DESC, name`,
+        [accountId]
+      );
+      for (const row of rows) {
+        allCharacters.push({
+          guid: Number(row.guid),
+          name: String(row.name),
+          race: Number(row.race),
+          class: Number(row.class),
+          level: Number(row.level),
+          online: Number(row.online),
+          realm_id: r.id,
+          realm_name: r.name,
+        } as CharacterRow);
+      }
+    } catch {}
+  }
+
+  allCharacters.sort((a, b) => b.level - a.level || a.name.localeCompare(b.name));
+  return allCharacters;
 }
 
 /**
  * The level a character's XP is held at, or null if it still gains XP.
  * `worldserver/lua_scripts/xp.lua` reads the same rows every few seconds.
  */
-export async function getXpLock(guid: number): Promise<number | null> {
+export async function getXpLock(guid: number, realmId: number = 1): Promise<number | null> {
   await ensureWebDb();
   const [rows] = await getPool().query<RowDataPacket[]>(
     `SELECT target_level FROM \`${WEB_DB}\`.shop_xp_locks
-      WHERE character_guid = ? AND released_at IS NULL`,
-    [guid]
+      WHERE character_guid = ? AND realm_id = ? AND released_at IS NULL`,
+    [guid, realmId]
   );
   return rows[0] ? Number(rows[0].target_level) : null;
 }
 
-/** Every live lock on an account's characters, keyed by guid, for the UI. */
+/** Every live lock on an account's characters, keyed by guid & realm, for the UI. */
 export async function listXpLocks(
   accountId: number
-): Promise<Record<number, number>> {
+): Promise<Record<string, number>> {
   await ensureWebDb();
   const [rows] = await getPool().query<RowDataPacket[]>(
-    `SELECT l.character_guid, l.target_level
-       FROM \`${WEB_DB}\`.shop_xp_locks l
-       JOIN \`${CHARS_DB}\`.characters c ON c.guid = l.character_guid
-      WHERE c.account = ? AND l.released_at IS NULL`,
+    `SELECT character_guid, realm_id, target_level
+       FROM \`${WEB_DB}\`.shop_xp_locks
+      WHERE account_id = ? AND released_at IS NULL`,
     [accountId]
   );
-  const out: Record<number, number> = {};
-  for (const r of rows) out[Number(r.character_guid)] = Number(r.target_level);
+  const out: Record<string, number> = {};
+  for (const r of rows) {
+    const guid = Number(r.character_guid);
+    const realmId = Number(r.realm_id);
+    const level = Number(r.target_level);
+    out[`${realmId}:${guid}`] = level;
+    out[String(guid)] = level;
+  }
   return out;
 }
 
@@ -300,6 +331,7 @@ export async function purchase(input: {
   accountId: number;
   productSlug: string;
   characterGuid: number;
+  realmId?: number;
   spec: string | null;
   idempotencyKey: string;
 }): Promise<TxnRow> {
@@ -308,7 +340,7 @@ export async function purchase(input: {
 
   // Phase 0: resolve and validate everything before any money moves.
   const product = await getEnabledProduct(input.productSlug);
-  const character = await getOwnedCharacter(input.characterGuid, input.accountId);
+  const character = await getOwnedCharacter(input.characterGuid, input.accountId, input.realmId);
   if (!NAME_RE.test(character.name)) {
     throw new HttpError(400, "Character name contains unsupported characters.");
   }
@@ -333,8 +365,8 @@ export async function purchase(input: {
     const [ins] = await conn.query<ResultSetHeader>(
       `INSERT INTO \`${WEB_DB}\`.shop_transactions
          (idempotency_key, account_id, product_id, price_paid,
-          character_guid, character_name, payload_snapshot, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
+          character_guid, character_name, realm_id, payload_snapshot, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
       [
         input.idempotencyKey,
         input.accountId,
@@ -342,6 +374,7 @@ export async function purchase(input: {
         product.price,
         character.guid,
         character.name,
+        character.realm_id || input.realmId || 1,
         JSON.stringify(snapshot),
       ]
     );
@@ -383,30 +416,72 @@ async function getEnabledProduct(slug: string): Promise<ProductRow> {
 
 async function getOwnedCharacter(
   guid: number,
-  accountId: number
+  accountId: number,
+  realmId?: number
 ): Promise<CharacterRow> {
   if (!Number.isInteger(guid) || guid <= 0) {
     throw new HttpError(400, "Pick a character.");
   }
-  const [rows] = await getPool().query<CharacterRow[]>(
-    `SELECT guid, name, race, class, level, online
-       FROM \`${CHARS_DB}\`.characters
-      WHERE guid = ? AND account = ? AND deleteInfos_Account IS NULL`,
-    [guid, accountId]
-  );
-  // The account predicate IS the ownership check: a guid the buyer does not
-  // own simply resolves to no row.
-  if (!rows[0]) throw new HttpError(404, "That character is not on your account.");
-  return rows[0];
+
+  const pool = getPool();
+  if (realmId) {
+    const realmConfig = await getRealmConfigById(realmId);
+    if (realmConfig) {
+      const [rows] = await pool.query<RowDataPacket[]>(
+        `SELECT guid, name, race, class, level, online
+           FROM \`${realmConfig.charsDb}\`.characters
+          WHERE guid = ? AND account = ? AND deleteInfos_Account IS NULL`,
+        [guid, accountId]
+      );
+      if (rows[0]) {
+        return {
+          guid: Number(rows[0].guid),
+          name: String(rows[0].name),
+          race: Number(rows[0].race),
+          class: Number(rows[0].class),
+          level: Number(rows[0].level),
+          online: Number(rows[0].online),
+          realm_id: realmConfig.id,
+          realm_name: realmConfig.name,
+        } as CharacterRow;
+      }
+    }
+  }
+
+  const realms = await listRealmsWithConfig();
+  for (const r of realms) {
+    try {
+      const [rows] = await pool.query<RowDataPacket[]>(
+        `SELECT guid, name, race, class, level, online
+           FROM \`${r.charsDb}\`.characters
+          WHERE guid = ? AND account = ? AND deleteInfos_Account IS NULL`,
+        [guid, accountId]
+      );
+      if (rows[0]) {
+        return {
+          guid: Number(rows[0].guid),
+          name: String(rows[0].name),
+          race: Number(rows[0].race),
+          class: Number(rows[0].class),
+          level: Number(rows[0].level),
+          online: Number(rows[0].online),
+          realm_id: r.id,
+          realm_name: r.name,
+        } as CharacterRow;
+      }
+    } catch {}
+  }
+
+  throw new HttpError(404, "That character is not on your account.");
 }
 
-async function getKnownProfessionSkills(guid: number): Promise<number[]> {
+async function getKnownProfessionSkills(guid: number, charsDb: string = CHARS_DB): Promise<number[]> {
   const [rows] = await getPool().query<RowDataPacket[]>(
-    `SELECT skill FROM \`${CHARS_DB}\`.character_skills
+    `SELECT skill FROM \`${charsDb}\`.character_skills
       WHERE guid = ? AND skill IN (?)`,
     [guid, [...PRIMARY_SKILLS, ...SECONDARY_SKILLS]]
   );
-  return rows.map((r) => Number(r.skill));
+  return rows.map((r: RowDataPacket) => Number(r.skill));
 }
 
 async function resolveSnapshot(
@@ -427,7 +502,7 @@ async function resolveSnapshot(
     // A boost sets the level outright, so it would walk straight through an
     // XP lock — the Lua hook only ever sees experience. Refuse instead of
     // silently undoing something the same player paid for.
-    const lockedAt = await getXpLock(character.guid);
+    const lockedAt = await getXpLock(character.guid, character.realm_id);
     if (lockedAt !== null) {
       throw new HttpError(
         409,
@@ -440,7 +515,7 @@ async function resolveSnapshot(
 
   if (product.delivery_type === "xp_lock") {
     const action = payload.action === "release" ? "release" : "lock";
-    const lockedAt = await getXpLock(character.guid);
+    const lockedAt = await getXpLock(character.guid, character.realm_id);
 
     if (action === "release") {
       if (lockedAt === null) {
@@ -646,12 +721,17 @@ async function deliverXpLock(
 ): Promise<void> {
   const pool = getPool();
 
+  // Every statement below is scoped by realm as well as guid: guids restart at
+  // 1 in each character database, so without it a purchase could release or
+  // overwrite the lock of an unrelated character on another realm.
+  const realmId = txn.realm_id || 1;
+
   if (snapshot.action === "release") {
     const [res] = await pool.query<ResultSetHeader>(
       `UPDATE \`${WEB_DB}\`.shop_xp_locks
           SET released_at = NOW()
-        WHERE character_guid = ? AND released_at IS NULL`,
-      [txn.character_guid]
+        WHERE character_guid = ? AND realm_id = ? AND released_at IS NULL`,
+      [txn.character_guid, realmId]
     );
     // Guarded, so two releases in flight can only pay for one.
     if (res.affectedRows === 0) {
@@ -664,17 +744,17 @@ async function deliverXpLock(
   try {
     await pool.query(
       `INSERT INTO \`${WEB_DB}\`.shop_xp_locks
-         (character_guid, account_id, target_level)
-       VALUES (?, ?, ?)`,
-      [txn.character_guid, txn.account_id, snapshot.targetLevel]
+         (character_guid, account_id, realm_id, target_level)
+       VALUES (?, ?, ?, ?)`,
+      [txn.character_guid, txn.account_id, realmId, snapshot.targetLevel]
     );
   } catch (err) {
     if ((err as { code?: string }).code !== "ER_DUP_ENTRY") throw err;
     const [res] = await pool.query<ResultSetHeader>(
       `UPDATE \`${WEB_DB}\`.shop_xp_locks
           SET account_id = ?, target_level = ?, locked_at = NOW(), released_at = NULL
-        WHERE character_guid = ? AND released_at IS NOT NULL`,
-      [txn.account_id, snapshot.targetLevel, txn.character_guid]
+        WHERE character_guid = ? AND realm_id = ? AND released_at IS NOT NULL`,
+      [txn.account_id, snapshot.targetLevel, txn.character_guid, realmId]
     );
     // The released_at guard means a concurrent second purchase cannot charge
     // twice for the same lock.

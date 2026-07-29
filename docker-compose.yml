@@ -104,9 +104,15 @@ services:
       - 127.0.0.1:${DOCKER_SOAP_EXTERNAL_PORT:-7878}:7878
     volumes:
       - ac-client-data:/azerothcore/env/dist/data/:ro
-      # Turns the bundled Lua engine on and gives it somewhere to log; the
-      # image installs only the .dist next to this path.
-      - ./worldserver/mod_ale.conf:/azerothcore/env/dist/etc/modules/mod_ale.conf:ro
+      # Turns the bundled Lua engine on and gives it somewhere to log.
+      #
+      # The whole directory is mounted, read-write, rather than mod_ale.conf
+      # alone: this path does not exist in the image, so a single-file mount
+      # makes Docker create the parent as root, and the entrypoint's
+      # `cp -rn env/ref/etc/*` then fails to write mod_ale.conf.dist into it.
+      # That cp runs under `set -e`, so the container dies on start. The
+      # directory must stay writable by uid 1000 (`task fix-perms`).
+      - ./worldserver/modules:/azerothcore/env/dist/etc/modules
       # Lua event scripts. The worldserver's CWD is /azerothcore and ScriptPath
       # is the relative "lua_scripts", so this is the directory it scans. It
       # watches the directory and reloads on change, so editing a script here
@@ -150,6 +156,16 @@ services:
       WORLD_HOST: ac-worldserver
       WORLD_PORT: "8085"
       ZEROTIER_NETWORK_ID: ${ZEROTIER_NETWORK_ID:-}
+    volumes:
+      # realms.json, exported from realms.yml by `task realm:render`, tells the
+      # portal each realm's service name and databases instead of leaving it to
+      # guess them from the realm id.
+      #
+      # The directory is mounted rather than the file: webapp/generated/ is
+      # committed (via .gitkeep) so this target always exists, whereas a
+      # single-file mount would have Docker create realms.json as an empty
+      # directory on any clone that had not rendered yet.
+      - ./webapp/generated:/app/generated:ro
     ports:
       - ${DOCKER_WEB_EXTERNAL_PORT:-8080}:3000
     depends_on:
@@ -256,6 +272,10 @@ services:
     container_name: ac-pb-worldserver
     build:
       context: ./playerbots
+      # Dockerfile.ale adds the AzerothCore Lua Engine on top of the plain
+      # playerbots build, so this realm runs the same worldserver/lua_scripts as
+      # every other realm. ./Dockerfile still builds without it if that fails.
+      dockerfile: Dockerfile.ale
       target: worldserver
     profiles:
       - playerbots
@@ -292,8 +312,23 @@ services:
       # second extraction needed since both realms use identical client files.
       - ac-client-data:/azerothcore/env/dist/data:ro
       # Playerbots module config - edit ./playerbots/playerbots.conf on the
-      # host and restart the container to apply changes.
+      # host and restart the container to apply changes. This image's entrypoint
+      # copies it into etc/modules/ where the core actually reads module config.
       - ./playerbots/playerbots.conf:/azerothcore/env/dist/etc/mod_playerbots.conf:ro
+      # The same Lua engine config and scripts every other realm gets.
+      #
+      # /usr/local/etc/modules, not env/dist/etc/modules as on ac-worldserver:
+      # this image is built from the playerbots fork with the default install
+      # prefix, so the core looks for module config under /usr/local/etc. Put it
+      # anywhere else and the server logs "Not found modules config files" and
+      # runs with ALE disabled. The entrypoint copies playerbots.conf here too.
+      #
+      # Read-write, and the directory rather than the file, for the same reasons
+      # as ac-worldserver above.
+      - ./worldserver/modules:/usr/local/etc/modules
+      # ALE.ScriptPath is relative to the working directory, which is
+      # /azerothcore in this image as in the official one.
+      - ./worldserver/lua_scripts:/azerothcore/lua_scripts:ro
     depends_on:
       ac-database:
         condition: service_healthy

@@ -28,6 +28,14 @@
 -- Must match WEB_DB in docker-compose.yml.
 local WEB_DB = "summonstack_web"
 
+-- Which realm this worldserver is. Every realm runs this same script from the
+-- same shared lua_scripts mount, and character guids restart at 1 in each
+-- character database — so guid 5 here and guid 5 on another realm are
+-- different characters, and locks must be matched on both columns.
+-- Falls back to 1 if the engine does not expose it, which is the id the
+-- webapp defaulted to before locks were realm-scoped.
+local REALM_ID = (type(GetRealmID) == "function" and GetRealmID()) or 1
+
 -- How often to re-read the panel's row. Also the worst-case delay between
 -- hitting Save and players seeing the change.
 local POLL_SECONDS = 15
@@ -95,7 +103,7 @@ local function refreshLocks()
   end
   local query = WorldDBQuery(string.format(
     "SELECT character_guid, target_level FROM `%s`.shop_xp_locks " ..
-    "WHERE released_at IS NULL", WEB_DB))
+    "WHERE realm_id = %u AND released_at IS NULL", WEB_DB, REALM_ID))
   -- Rebuilt rather than merged: a released lock simply stops being returned.
   local fresh = {}
   if query then
@@ -114,7 +122,8 @@ local function refreshLockFor(player)
   local guid = player:GetGUIDLow()
   local query = WorldDBQuery(string.format(
     "SELECT target_level FROM `%s`.shop_xp_locks " ..
-    "WHERE character_guid = %u AND released_at IS NULL", WEB_DB, guid))
+    "WHERE character_guid = %u AND realm_id = %u AND released_at IS NULL",
+    WEB_DB, guid, REALM_ID))
   locks[guid] = query and query:GetUInt32(0) or nil
 end
 
