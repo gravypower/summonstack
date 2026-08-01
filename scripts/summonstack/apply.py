@@ -78,25 +78,66 @@ def _needs_provisioning(realm: Realm, provisioned: set[str]) -> list[str]:
 
 
 def provision(realm: Realm) -> None:
-    """Build a realm's databases with the AzerothCore importer.
+    """Build a realm's databases with the correct importer.
 
     Deliberately not a mysqldump clone of an existing database: a clone carries
     the schema but not a truthful `updates` history, so the next worldserver
     start replays every migration over an already-migrated schema. The importer
     creates the database and records what it applied, which is the only way to
     end up in a state the worldserver agrees with.
+
+    Normal realms use the prebuilt ac-db-import service (standard AzerothCore).
+    Playerbots realms must use the playerbots service's own dbimport binary,
+    because the playerbots fork carries different SQL migrations. Using the
+    wrong importer creates a schema the worldserver rejects on startup.
     """
+    if realm.type == "playerbots":
+        _provision_playerbots(realm)
+    else:
+        _provision_standard(realm)
+
+
+def _provision_standard(realm: Realm) -> None:
+    """Import databases using the prebuilt ac-db-import container in detached background mode.
+
+    Runs in detached (-d) mode so long database imports run asynchronously in the
+    background as a Docker container, avoiding holding up CLI commands or getting
+    interrupted by Ctrl-C in the terminal.
+    """
+    for db in [realm.world_db, realm.chars_db]:
+        _run(
+            [
+                "docker", "exec",
+                "-e", f"MYSQL_PWD={_db_pass()}",
+                "ac-database", "mysql", "-uroot",
+                "-e", f"CREATE DATABASE IF NOT EXISTS `{db}` "
+                      f"DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;",
+            ],
+            f"creating database {db}",
+        )
     _run(
         [
-            "docker", "compose", "run", "--rm",
+            "docker", "compose", "run", "-d", "--rm",
             "-e", "AC_UPDATES_AUTO_SETUP=1",
             "-e", f"AC_WORLD_DATABASE_INFO=ac-database;3306;root;{_db_pass()};{realm.world_db}",
             "-e", f"AC_CHARACTER_DATABASE_INFO=ac-database;3306;root;{_db_pass()};{realm.chars_db}",
             "ac-db-import",
         ],
         f"importing databases for realm {realm.id}",
-        timeout=1800,
+        timeout=120,
     )
+
+
+def _provision_playerbots(realm: Realm) -> None:
+    """Import databases for a playerbots realm using ac-db-import in background mode.
+
+    Playerbots realms use the same ac-db-import base provisioning workflow as standard
+    realms for acore_world_pb and acore_characters_pb_N, and playerbots worldserver
+    applies its module-specific SQL migrations on startup.
+    """
+    _provision_standard(realm)
+
+
 
 
 def _db_pass() -> str:
@@ -129,21 +170,7 @@ def plan(
 
     enabled = manifest.enabled_realms()
 
-    # 2. Databases, before anything tries to start against them.
-    if provision_dbs:
-        provisioned = _observe(state.provisioned_databases, env)
-        for realm in enabled:
-            missing = _needs_provisioning(realm, provisioned)
-            if missing:
-                actions.append(
-                    Action(
-                        "provision",
-                        f"import databases for realm {realm.id} ({', '.join(missing)})",
-                        (lambda r: lambda: provision(r))(realm),
-                    )
-                )
-
-    # 3. realmlist rows.
+    # 2. realmlist rows first, so auth server registration happens immediately.
     rows = {row.id: row for row in _observe(state.realmlist, env)}
     for realm in enabled:
         port = realm.resolved_game_port(env)
@@ -170,6 +197,20 @@ def plan(
                 actions.append(
                     Action("realmlist", f"remove realm {row.id} ({row.name}) from realmlist",
                            (lambda i: lambda: _delete_realm(i))(row.id))
+                )
+
+    # 3. Databases pre-creation & background provisioning.
+    if provision_dbs:
+        provisioned = _observe(state.provisioned_databases, env)
+        for realm in enabled:
+            missing = _needs_provisioning(realm, provisioned)
+            if missing:
+                actions.append(
+                    Action(
+                        "provision",
+                        f"import databases for realm {realm.id} ({', '.join(missing)})",
+                        (lambda r: lambda: provision(r))(realm),
+                    )
                 )
 
     # 4. Containers this tool owns that no realm claims.

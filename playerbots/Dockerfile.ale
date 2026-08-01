@@ -61,9 +61,9 @@ RUN git clone --depth=1 \
 #   cp modules/mod-playerbots/sql/world/base/*.sql      data/sql/custom/db_world/
 RUN mkdir -p /azerothcore/data/sql/custom/db_characters \
              /azerothcore/data/sql/custom/db_world && \
-    find /azerothcore/modules/mod-playerbots/sql/characters/base -name '*.sql' \
+    find /azerothcore/modules/mod-playerbots/data/sql/playerbots /azerothcore/modules/mod-playerbots/data/sql/characters -name '*.sql' \
          -exec cp {} /azerothcore/data/sql/custom/db_characters/ \; 2>/dev/null || true && \
-    find /azerothcore/modules/mod-playerbots/sql/world/base -name '*.sql' \
+    find /azerothcore/modules/mod-playerbots/data/sql/world -name '*.sql' \
          -exec cp {} /azerothcore/data/sql/custom/db_world/ \; 2>/dev/null || true
 
 WORKDIR /azerothcore
@@ -138,7 +138,8 @@ COPY --from=builder /azerothcore/modules /azerothcore/modules
 WORKDIR /azerothcore
 
 COPY entrypoint-worldserver.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY entrypoint-dbimport.sh    /entrypoint-dbimport.sh
+RUN chmod +x /entrypoint.sh /entrypoint-dbimport.sh
 
 # 8085 — game traffic  |  7878 — SOAP API (internal only, host-bound in compose)
 EXPOSE 8085 7878

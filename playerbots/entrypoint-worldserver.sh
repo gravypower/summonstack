@@ -40,6 +40,12 @@ SOAP.IP      = "127.0.0.1"
 
 Updates.AutoSetup       = 1
 Updates.EnableDatabases = 6
+
+Appender.Console = 1,4,0
+Appender.Server = 2,4,0,"Server.log","w"
+Logger.root = 4,Console Server
+Logger.server = 4,Console Server
+Logger.module = 4,Console Server
 CONFEOF
   fi
 fi
@@ -68,9 +74,10 @@ _set() {
 }
 
 # Database connections
-_set_str "LoginDatabaseInfo"     "${AC_LOGIN_DATABASE_INFO}"
-_set_str "WorldDatabaseInfo"     "${AC_WORLD_DATABASE_INFO}"
-_set_str "CharacterDatabaseInfo" "${AC_CHARACTER_DATABASE_INFO}"
+_set_str "LoginDatabaseInfo"      "${AC_LOGIN_DATABASE_INFO}"
+_set_str "WorldDatabaseInfo"      "${AC_WORLD_DATABASE_INFO}"
+_set_str "CharacterDatabaseInfo"  "${AC_CHARACTER_DATABASE_INFO}"
+_set_str "PlayerbotsDatabaseInfo" "${AC_PLAYERBOTS_DATABASE_INFO:-${AC_CHARACTER_DATABASE_INFO}}"
 
 # Paths
 _set_str "DataDir"         "${AC_DATA_DIR:-/azerothcore/env/dist/data}"
@@ -79,16 +86,18 @@ _set_str "TempDir"         "${AC_TEMP_DIR:-/azerothcore/env/dist/temp}"
 _set_str "SourceDirectory" "/azerothcore"
 _set_str "MySQLExecutable" "${AC_MYSQL_EXECUTABLE:-/usr/bin/mysql}"
 
-# Realm
-_set "RealmID" "${AC_REALM_ID:-2}"
+# Realm & Network
+_set "RealmID"          "${AC_REALM_ID:-2}"
+_set "WorldServerPort"  "${AC_WORLD_SERVER_PORT:-8085}"
+_set_str "BindIP"       "${AC_BIND_IP:-0.0.0.0}"
 
 # SOAP API
 _set "SOAP.Enabled" "${AC_SOAP_ENABLED:-0}"
-_set_str "SOAP.IP"  "${AC_SOAP_IP:-127.0.0.1}"
+_set_str "SOAP.IP"  "${AC_SOAP_IP:-0.0.0.0}"
 
 # Auto-import databases on first start.
-_set "Updates.AutoSetup"       "1"
-_set "Updates.EnableDatabases" "${AC_UPDATES_ENABLE_DBS:-6}"
+_set "Updates.AutoSetup"       "0"
+_set "Updates.EnableDatabases" "${AC_UPDATES_ENABLE_DBS:-0}"
 
 # Copy to default expected path /usr/local/etc/worldserver.conf as well
 cp "$CONF" /usr/local/etc/worldserver.conf

@@ -41,6 +41,7 @@ def _db_info(database: str) -> str:
 
 def service_for(realm: Realm) -> dict[str, Any]:
     """The compose service for one generated realm."""
+    game_port = realm.game_port
     environment: dict[str, str] = {
         "AC_DATA_DIR": "/azerothcore/env/dist/data",
         "AC_LOGS_DIR": "/azerothcore/env/dist/logs",
@@ -48,6 +49,8 @@ def service_for(realm: Realm) -> dict[str, Any]:
         "AC_WORLD_DATABASE_INFO": _db_info(realm.world_db),
         "AC_CHARACTER_DATABASE_INFO": _db_info(realm.chars_db),
         "AC_REALM_ID": str(realm.id),
+        "AC_BIND_IP": "0.0.0.0",
+        "AC_WORLD_SERVER_PORT": "8085",
         "AC_SOAP_ENABLED": "1",
         "AC_SOAP_IP": "0.0.0.0",
     }
@@ -69,14 +72,13 @@ def service_for(realm: Realm) -> dict[str, Any]:
             "target": "worldserver",
         }
         environment["AC_TEMP_DIR"] = "/azerothcore/env/dist/temp"
+        environment["AC_PLAYERBOTS_DATABASE_INFO"] = _db_info(realm.chars_db)
         environment.update(PLAYERBOT_DEFAULTS)
         volumes = [
             "ac-client-data:/azerothcore/env/dist/data:ro",
             "./playerbots/playerbots.conf:/azerothcore/env/dist/etc/mod_playerbots.conf:ro",
-            # Same two mounts as a normal realm, but the module config goes to
-            # /usr/local/etc/modules: this image is built from the playerbots
-            # fork with the default install prefix, so that is where the core
-            # looks. See the note on ac-pb-worldserver in docker-compose.yml.
+            "./playerbots/entrypoint-worldserver.sh:/entrypoint.sh:ro",
+            "./playerbots/entrypoint-worldserver.sh:/entrypoint-worldserver.sh:ro",
             "./worldserver/modules:/usr/local/etc/modules",
             "./worldserver/lua_scripts:/azerothcore/lua_scripts:ro",
         ]

@@ -1,0 +1,230 @@
+"""Operational helpers for summonstack task runner.
+
+Handles doctor checks, setup, permission fixes, SOAP queries, and stack operations.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import shutil
+import subprocess
+import sys
+import secrets
+import urllib.request
+import urllib.error
+import base64
+
+from .env import load_env
+from . import manifest as mf, compose, portal, apply as ap
+
+
+def fix_perms() -> None:
+    """Ensure bind-mounted config directories are writable by container user (uid 1000)."""
+    for d in ["worldserver/modules"]:
+        os.makedirs(d, exist_ok=True)
+        try:
+            st = os.stat(d)
+            if st.st_uid != 1000:
+                res = subprocess.run(["chown", "-R", "1000:1000", d], capture_output=True)
+                if res.returncode == 0:
+                    print(f"  chowned {d} to uid 1000")
+        except Exception:
+            pass
+
+
+def setup_env() -> int:
+    """Initialize .env with safe defaults if missing."""
+    if os.path.exists(".env"):
+        print(".env already exists.")
+        return 0
+
+    if os.path.exists(".env.example"):
+        shutil.copy(".env.example", ".env")
+    else:
+        with open(".env", "w", encoding="utf-8") as f:
+            f.write("DOCKER_DB_ROOT_PASSWORD=password\nSESSION_SECRET=please-change-me\n")
+
+    secret = secrets.token_urlsafe(36)
+    with open(".env", "r", encoding="utf-8") as f:
+        content = f.read()
+
+    content = re.sub(r"^SESSION_SECRET=.*$", f"SESSION_SECRET={secret}", content, flags=re.MULTILINE)
+    with open(".env", "w", encoding="utf-8") as f:
+        f.write(content)
+    os.chmod(".env", 0o600)
+    print("Wrote .env with a random SESSION_SECRET.")
+    print("DOCKER_DB_ROOT_PASSWORD left as default to match existing MySQL volume if present.")
+    return 0
+
+
+def doctor() -> int:
+    """Run full diagnostic checks across environment, active operations, databases, images, permissions, and containers."""
+    env = load_env()
+
+    print("── active operations ──")
+    try:
+        from . import state
+        importers = state.active_importers()
+        if importers:
+            for name, info in importers.items():
+                print(f"  [DB Importer] {name}: {info['status']}")
+                if info['last_log']:
+                    print(f"                {info['last_log']}")
+        else:
+            print("  no active database imports or background tasks")
+    except Exception as e:
+        print(f"  error querying active ops: {e}")
+
+    print("── database inventory ──")
+    try:
+        tbl_counts = state.databases(env)
+        if tbl_counts:
+            for db_name, count in sorted(tbl_counts.items()):
+                if db_name.startswith("acore_"):
+                    print(f"  {db_name:<30} {count} tables")
+        else:
+            print("  could not query databases (is ac-database running?)")
+    except Exception as e:
+        print(f"  database query error: {e}")
+
+    print("── .env ──")
+    if os.path.exists(".env"):
+        print("  present")
+        if env.get("SESSION_SECRET") == "please-change-me":
+            print("  WARNING: SESSION_SECRET is still default — sessions are forgeable.")
+    else:
+        print("  MISSING — the stack is running on compose defaults. Run: task setup")
+
+    print("── image ages ──")
+    images = [
+        "acore/ac-wotlk-db-import:master",
+        "acore/ac-wotlk-worldserver:master",
+        "acore/ac-wotlk-authserver:master",
+        "acore/ac-wotlk-client-data:master",
+    ]
+    for img in images:
+        res = subprocess.run(
+            ["docker", "inspect", img, "--format", "{{.Created}}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        created = res.stdout.strip().split("T")[0] if res.returncode == 0 and res.stdout.strip() else "not pulled"
+        print(f"  {img:<40} {created}")
+
+    print("── config dir permissions ──")
+    for d in ["worldserver/modules"]:
+        if not os.path.exists(d):
+            print(f"  {d} MISSING — run: task fix-perms")
+        else:
+            st = os.stat(d)
+            if st.st_uid != 1000:
+                print(f"  {d} is not writable by uid 1000 — run: task fix-perms")
+            else:
+                print("  ok")
+
+    print("── realm drift & health ──")
+    try:
+        from .cli import cmd_check
+        class DummyArgs:
+            pass
+        cmd_check(DummyArgs())
+    except Exception as e:
+        print(f"  realm check error: {e}")
+
+    print("── container name clashes ──")
+    res = subprocess.run(
+        ["docker", "ps", "-a", "--filter", "name=^/ac-", "--format", "{{.Names}}\t{{.Label \"com.docker.compose.project\"}}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    clashes = []
+    if res.returncode == 0:
+        for line in res.stdout.splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 2 and parts[1] and parts[1] != "summonstack":
+                clashes.append(f"  {parts[0]} belongs to project: {parts[1]}")
+    if clashes:
+        for c in clashes:
+            print(c)
+    else:
+        print("  none")
+    return 0
+
+
+def soap_set(user: str, passw: str) -> None:
+    """Set SOAP_USER and SOAP_PASS in .env."""
+    if not os.path.exists(".env"):
+        print("No .env found. Run: task setup", file=sys.stderr)
+        sys.exit(1)
+
+    with open(".env", "r", encoding="utf-8") as f:
+        content = f.read()
+
+    def set_key(k: str, v: str, text: str) -> str:
+        if re.search(rf"^{k}=", text, re.MULTILINE):
+            return re.sub(rf"^{k}=.*$", f"{k}={v}", text, flags=re.MULTILINE)
+        return text.rstrip() + f"\n{k}={v}\n"
+
+    content = set_key("SOAP_USER", user, content)
+    content = set_key("SOAP_PASS", passw, content)
+
+    with open(".env", "w", encoding="utf-8") as f:
+        f.write(content)
+    os.chmod(".env", 0o600)
+    print("Wrote SOAP_USER/SOAP_PASS to .env (mode 600).")
+
+
+def soap_check(port: int | None = None) -> int:
+    """Query worldserver SOAP API to verify credentials."""
+    env = load_env()
+    user = env.get("SOAP_USER")
+    passw = env.get("SOAP_PASS")
+    if not port:
+        port_str = env.get("DOCKER_SOAP_EXTERNAL_PORT") or "7878"
+        try:
+            port = int(port_str)
+        except ValueError:
+            port = 7878
+
+    if not user or not passw:
+        print("SOAP_USER/SOAP_PASS not set in .env. Run: task soap USER=x PASS=y", file=sys.stderr)
+        return 1
+
+    body = (
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        '<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="urn:AC">\n'
+        '  <SOAP-ENV:Body><ns1:executeCommand><command>server info</command></ns1:executeCommand></SOAP-ENV:Body>\n'
+        '</SOAP-ENV:Envelope>'
+    ).encode("utf-8")
+
+    req = urllib.request.Request(f"http://127.0.0.1:{port}/", data=body, headers={"Content-Type": "text/xml"})
+    credentials = f"{user}:{passw}".encode("utf-8")
+    req.add_header("Authorization", f"Basic {base64.b64encode(credentials).decode('ascii')}")
+
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            content = resp.read().decode("utf-8", errors="replace")
+            if "<result>" in content:
+                match = re.search(r"<result>(.*?)</result>", content, re.DOTALL)
+                res_text = match.group(1).replace("&#xD;", "").strip() if match else content
+                print(f"SOAP OK as '{user}' (port {port}). Worldserver replied:")
+                for line in res_text.splitlines()[:6]:
+                    if line.strip():
+                        print(f"  {line.strip()}")
+                return 0
+            else:
+                print(f"No usable reply from worldserver SOAP API on port {port}.", file=sys.stderr)
+                return 1
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            print(f"SOAP auth REJECTED for '{user}' on port {port} (HTTP {e.code}).", file=sys.stderr)
+            print(f"Check the password and ensure account has GM level 3.", file=sys.stderr)
+        else:
+            print(f"SOAP HTTP error {e.code} on port {port}.", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"Could not reach worldserver SOAP API on 127.0.0.1:{port} ({e}).", file=sys.stderr)
+        return 1

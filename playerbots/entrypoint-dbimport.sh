@@ -39,10 +39,25 @@ _set_str() {
   fi
 }
 
+# Helper: replace (or append) an unquoted numeric/keyword setting.
+_set() {
+  local key="$1" val="$2"
+  [ -n "$val" ] || return 0
+  if grep -q "^${key}[[:space:]]*=" "$CONF"; then
+    sed -i "s|^${key}[[:space:]]*=.*|${key} = ${val}|" "$CONF"
+  else
+    echo "${key} = ${val}" >> "$CONF"
+  fi
+}
+
 _set_str "LoginDatabaseInfo"     "${AC_LOGIN_DATABASE_INFO}"
 _set_str "WorldDatabaseInfo"     "${AC_WORLD_DATABASE_INFO}"
 _set_str "CharacterDatabaseInfo" "${AC_CHARACTER_DATABASE_INFO}"
 _set_str "LogsDir"               "${AC_LOGS_DIR:-/azerothcore/env/dist/logs}"
+
+_set "Updates.AutoSetup"       "${AC_UPDATES_AUTO_SETUP:-1}"
+_set "Updates.EnableDatabases" "${AC_UPDATES_ENABLE_DBS:-6}"
+
 
 mkdir -p "${AC_LOGS_DIR:-/azerothcore/env/dist/logs}"
 

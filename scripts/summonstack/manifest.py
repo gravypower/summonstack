@@ -13,7 +13,7 @@ from typing import Any
 
 import yaml
 
-from .env import load_env, resolve_port
+from .env import expand, load_env, resolve_port
 
 MANIFEST_PATH = "realms.yml"
 
@@ -114,7 +114,9 @@ class Manifest:
         return [r for r in self.realms if r.managed == "generated"]
 
     def address_for(self, realm: Realm) -> str:
-        return realm.address or str(self.defaults.get("address") or "127.0.0.1")
+        raw_address = realm.address or str(self.defaults.get("address") or "127.0.0.1")
+        env = load_env()
+        return expand(raw_address, env)
 
 
 def find(manifest: "Manifest", token: str) -> "Realm | None":
@@ -146,15 +148,14 @@ def default_service(realm_id: int, realm_type: str) -> str:
 def default_databases(realm_id: int, realm_type: str, shared: bool = False) -> tuple[str, str]:
     """(world_db, chars_db) for a new realm.
 
-    Playerbot realms need their own world database because the module writes to
-    it; normal realms share the read-only acore_world. `shared` is the old
-    CREATE_DB=0 behaviour — point the realm at the existing databases instead of
-    provisioning it a character database of its own.
+    Playerbot realms share the acore_world_pb base database (just as normal realms
+    share acore_world), giving them instant setup while retaining dedicated character
+    databases per realm.
     """
     if realm_type == "playerbots":
         if shared:
             return "acore_world_pb", "acore_characters_pb"
-        return f"acore_world_pb_{realm_id}", f"acore_characters_pb_{realm_id}"
+        return "acore_world_pb", f"acore_characters_pb_{realm_id}"
     if shared:
         return "acore_world", "acore_characters"
     return "acore_world", f"acore_characters_{realm_id}"

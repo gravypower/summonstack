@@ -58,43 +58,18 @@ tasks:
   add:
     desc: "Add a normal realm: task realm:add [NAME=\"My Realm\"] [ID=3] [PORT=8087] [ADDR=1.2.3.4] [CREATE_DB=1]"
     cmds:
-      - task: add-realm
-        vars:
-          TYPE: normal
-          NAME: "{{.NAME}}"
-          ID: "{{.ID}}"
-          PORT: "{{.PORT}}"
-          ADDR: "{{.ADDR}}"
-          CREATE_DB: '{{.CREATE_DB | default "1"}}'
+      - |
+        set -euo pipefail
+        {{.SS}} add --type normal {{if .NAME}}--name "{{.NAME}}"{{end}} {{if .ID}}--id "{{.ID}}"{{end}} {{if .PORT}}--port "{{.PORT}}"{{end}} {{if .ADDR}}--addr "{{.ADDR}}"{{end}} {{if eq (.CREATE_DB | default "1") "0"}}--share-dbs{{end}}
+        echo ""
+        {{.SS}} list
 
   "add:playerbots":
     desc: "Add a playerbots realm: task realm:add:playerbots [NAME=\"PB Realm\"] [ID=3] [PORT=8087] [ADDR=1.2.3.4]"
     cmds:
-      - task: add-realm
-        vars:
-          TYPE: playerbots
-          NAME: "{{.NAME}}"
-          ID: "{{.ID}}"
-          PORT: "{{.PORT}}"
-          ADDR: "{{.ADDR}}"
-          CREATE_DB: '{{.CREATE_DB | default "1"}}'
-
-  add-realm:
-    internal: true
-    cmds:
-      # Adding a realm is: write it to the manifest, then reconcile. The
-      # importer builds its databases, realmlist is upserted and the container
-      # is started by the same code path `task realm:apply` runs, so a failure
-      # part way through is repaired by re-running rather than hand-unpicked.
       - |
         set -euo pipefail
-        {{.SS}} add \
-          --type "{{.TYPE}}" \
-          --name "{{.NAME}}" \
-          {{if .ID}}--id "{{.ID}}"{{end}} \
-          {{if .PORT}}--port "{{.PORT}}"{{end}} \
-          {{if .ADDR}}--addr "{{.ADDR}}"{{end}} \
-          {{if eq .CREATE_DB "0"}}--share-dbs{{end}}
+        {{.SS}} add --type playerbots {{if .NAME}}--name "{{.NAME}}"{{end}} {{if .ID}}--id "{{.ID}}"{{end}} {{if .PORT}}--port "{{.PORT}}"{{end}} {{if .ADDR}}--addr "{{.ADDR}}"{{end}} {{if eq (.CREATE_DB | default "1") "0"}}--share-dbs{{end}}
         echo ""
         {{.SS}} list
 
@@ -125,11 +100,12 @@ tasks:
 
         export MYSQL_PWD='{{.DB_PASS}}'
         if [ "{{.DROP_DB | default "0"}}" = "1" ]; then
-          # Only databases no remaining realm references. A realm added with
-          # CREATE_DB=0 shares acore_characters with realm 1, so dropping "its"
-          # character database by name would take the main one with it.
           still_used=$({{.SS}} databases)
           for db in "$REALM_CHARS_DB" "$REALM_WORLD_DB"; do
+            if [ "$db" = "acore_world" ] || [ "$db" = "acore_world_pb" ]; then
+              echo "Keeping shared base database $db (re-used when realms are added)."
+              continue
+            fi
             if printf '%s\n' "$still_used" | grep -qxF "$db"; then
               echo "Keeping $db — still used by another realm."
             else
@@ -164,7 +140,7 @@ tasks:
       - |
         set -euo pipefail
         if [ -z "{{.REALM}}" ]; then
-          docker compose stop
+          task down
           exit 0
         fi
         eval "$({{.SS}} resolve "{{.REALM}}" --print-env)"
@@ -212,7 +188,7 @@ tasks:
         docker attach "$REALM_SERVICE"
 
   db:import:
-    desc: "Re-import a realm's databases: task realm:db:import REALM=1|2|pb"
+    desc: "Re-import a specific realm's databases: task realm:db:import REALM=1|2|pb"
     cmds:
       # One importer run per realm, driven by the manifest — the same code path
       # `task realm:apply` uses for a database that is missing. There is no
@@ -264,10 +240,10 @@ tasks:
         echo "realms.yml still says $REALM_ADDR — update it there too, or"
         echo "task realm:check will keep reporting the difference."
 
-  soap:check:
+  "soap:check":
     desc: "Check SOAP connection for a realm: task realm:soap:check [REALM=1|2]"
     cmds:
       - |
         set -euo pipefail
         eval "$({{.SS}} resolve "{{.REALM | default "1"}}" --print-env)"
-        task admin:soap-check PORT="$REALM_SOAP_PORT"
+        task admin:soap:check PORT="$REALM_SOAP_PORT"

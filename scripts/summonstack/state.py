@@ -134,3 +134,35 @@ def containers() -> dict[str, str]:
         if name:
             status[name] = state
     return status
+
+
+def active_importers() -> dict[str, dict[str, str]]:
+    """Detect running database importer containers and their current progress."""
+    res = subprocess.run(
+        ["docker", "ps", "--filter", "name=db-import", "--format", "{{.Names}}\t{{.Status}}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    importers = {}
+    if res.returncode == 0:
+        for line in res.stdout.splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 2:
+                name, status_str = parts[0], parts[1]
+                log_res = subprocess.run(
+                    ["docker", "logs", "--tail", "10", name],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                logs = (log_res.stdout or log_res.stderr or "").strip().splitlines()
+                last_line = ""
+                for l in reversed(logs):
+                    if "Applying" in l:
+                        last_line = l.strip()
+                        break
+                if not last_line and logs:
+                    last_line = logs[-1].strip()
+                importers[name] = {"status": status_str, "last_log": last_line}
+    return importers

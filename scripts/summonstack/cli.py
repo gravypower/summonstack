@@ -41,6 +41,15 @@ def _load() -> mf.Manifest:
         raise SystemExit(1)
 
 
+def _is_ready(port: int) -> bool:
+    import socket
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.4):
+            return True
+    except (OSError, socket.timeout):
+        return False
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     manifest = _load()
     env = load_env()
@@ -48,20 +57,53 @@ def cmd_list(args: argparse.Namespace) -> int:
         status = state.containers()
     except state.StateError:
         status = {}
+    try:
+        table_counts = state.databases(env)
+    except state.StateError:
+        table_counts = {}
+    try:
+        importers = state.active_importers()
+    except state.StateError:
+        importers = {}
 
     print(f"{'ID':<4} {'NAME':<26} {'TYPE':<11} {'GAME':<6} {'SOAP':<6} {'SERVICE':<18} STATUS")
     print("─" * 92)
     for realm in sorted(manifest.realms, key=lambda r: r.id):
-        live = status.get(realm.service, "not created")
+        game_port = realm.resolved_game_port(env)
+        live = status.get(realm.service)
+        if live and live.startswith("Up"):
+            if _is_ready(game_port):
+                live_status = f"Ready ({live})"
+            else:
+                live_status = f"Initializing ({live})"
+        elif live:
+            live_status = live
+        elif importers:
+            world_tables = table_counts.get(realm.world_db, 0)
+            live_status = f"importing DB ({realm.world_db}: {world_tables} tables)"
+        elif realm.world_db not in table_counts or table_counts[realm.world_db] < 20:
+            live_status = f"missing DB ({realm.world_db})"
+        elif realm.chars_db not in table_counts or table_counts[realm.chars_db] < 10:
+            live_status = f"missing DB ({realm.chars_db})"
+        else:
+            live_status = "stopped"
+
         if not realm.enabled:
-            live = f"disabled ({live})"
+            live_status = f"disabled ({live_status})"
         print(
             f"{realm.id:<4} {realm.name[:26]:<26} {realm.type:<11} "
-            f"{realm.resolved_game_port(env):<6} {realm.resolved_soap_port(env):<6} "
-            f"{realm.service:<18} {live}"
+            f"{game_port:<6} {realm.resolved_soap_port(env):<6} "
+            f"{realm.service:<18} {live_status}"
         )
     if not manifest.realms:
         print("(no realms declared)")
+
+    if importers:
+        print("\n── Active Operations ──")
+        for name, info in importers.items():
+            print(f"  [Importer] {name}: {info['status']}")
+            if info['last_log']:
+                print(f"             {info['last_log']}")
     return 0
 
 
@@ -340,6 +382,9 @@ def cmd_add(args: argparse.Namespace) -> int:
         address=args.addr,
         share_databases=args.share_dbs,
     )
+    if getattr(args, "dry_run", False):
+        _emit(realm, manifest, False, f"[dry-run] Would add realm {realm.id} to {mf.MANIFEST_PATH}:")
+        return 0
     manifest.realms.append(realm)
     mf.save(manifest)
     stream = sys.stderr if args.print_env else sys.stdout
@@ -420,6 +465,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="point the realm at the existing databases instead of its own",
     )
     add_p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="show what realm allocation would do without saving or reconciling",
+    )
+    add_p.add_argument(
         "--print-env",
         action="store_true",
         help="print shell assignments on stdout for eval, progress on stderr",
@@ -431,6 +481,20 @@ def build_parser() -> argparse.ArgumentParser:
     rem_p.add_argument("--force", action="store_true")
     rem_p.add_argument("--print-env", action="store_true")
     rem_p.set_defaults(func=cmd_remove)
+
+    from . import ops
+    sub.add_parser("doctor", help="run stack diagnostic checks").set_defaults(func=lambda args: ops.doctor())
+    sub.add_parser("fix-perms", help="make config dirs writable by container user").set_defaults(func=lambda args: ops.fix_perms() or 0)
+    sub.add_parser("setup", help="create .env with random session secret").set_defaults(func=lambda args: ops.setup_env())
+
+    sc_p = sub.add_parser("soap-check", help="verify worldserver SOAP credentials")
+    sc_p.add_argument("--port", type=int, default=None)
+    sc_p.set_defaults(func=lambda args: ops.soap_check(args.port))
+
+    ss_p = sub.add_parser("soap-set", help="set SOAP_USER and SOAP_PASS in .env")
+    ss_p.add_argument("--user", required=True)
+    ss_p.add_argument("--pass", dest="passw", required=True)
+    ss_p.set_defaults(func=lambda args: ops.soap_set(args.user, args.passw) or 0)
 
     return parser
 

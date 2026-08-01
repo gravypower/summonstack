@@ -1,6 +1,9 @@
 # Domain: Admin & SOAP Console Management
 version: "3"
 
+vars:
+  SS: python3 -m scripts.summonstack
+
 tasks:
   default:
     desc: "Create/promote a GM3 admin (wires the console on first setup; SOAP=1 repoints it)"
@@ -31,73 +34,15 @@ tasks:
       vars: [USER, PASS]
     silent: true
     cmds:
-      - |
-        test -f .env || { echo "No .env found. Run: task setup" >&2; exit 1; }
-        set_env() {
-          SS_KEY="$1" SS_VAL="$2" awk '
-            BEGIN { k = ENVIRON["SS_KEY"]; v = ENVIRON["SS_VAL"]; done = 0 }
-            index($0, k "=") == 1 { print k "=" v; done = 1; next }
-            { print }
-            END { if (!done) print k "=" v }
-          ' .env > .env.tmp && mv .env.tmp .env
-        }
-        set_env SOAP_USER '{{.USER}}'
-        set_env SOAP_PASS '{{.PASS}}'
-        chmod 600 .env
-        echo "Wrote SOAP_USER/SOAP_PASS to .env (mode 600)."
+      - "{{.SS}} soap-set --user '{{.USER}}' --pass '{{.PASS}}'"
       - docker compose up -d --no-deps ac-webapp
-      - task: soap:check
+      - task: "soap:check"
 
-  soap-check:
+  "soap:check":
     desc: Verify the admin console credentials against the worldserver (or specific realm SOAP port)
     vars:
       PORT: '{{.PORT | default ""}}'
     silent: true
     cmds:
-      - |
-        user=$(grep -E '^SOAP_USER=' .env 2>/dev/null | cut -d= -f2- || true)
-        pass=$(grep -E '^SOAP_PASS=' .env 2>/dev/null | cut -d= -f2- || true)
-        port="{{.PORT}}"
-        if [ -z "$port" ]; then
-          port=$(grep -E '^DOCKER_SOAP_EXTERNAL_PORT=' .env 2>/dev/null | cut -d= -f2- || true)
-          port="${port:-7878}"
-        fi
-        if [ -z "$user" ] || [ -z "$pass" ]; then
-          echo "SOAP_USER/SOAP_PASS not set in .env. Run: task soap USER=x PASS=y" >&2
-          exit 1
-        fi
-        body='<?xml version="1.0" encoding="utf-8"?>
-        <SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="urn:AC">
-          <SOAP-ENV:Body><ns1:executeCommand><command>server info</command></ns1:executeCommand></SOAP-ENV:Body>
-        </SOAP-ENV:Envelope>'
-        raw=$(curl -s -m 10 -u "$user:$pass" -H 'Content-Type: text/xml' \
-               -d "$body" -w '__HTTP__%{http_code}' "http://127.0.0.1:${port}/" 2>/dev/null || true)
-        code=${raw##*__HTTP__}
-        out=${raw%__HTTP__*}
-        case "$code" in
-          000|"")
-            echo "Could not reach the worldserver SOAP API on 127.0.0.1:${port}." >&2
-            echo "Is the worldserver up? Check with: task ps" >&2
-            exit 1
-            ;;
-          401|403)
-            echo "SOAP auth REJECTED for '$user' on port ${port} (HTTP $code)." >&2
-            echo "Check the password, and that the account has GM level 3:" >&2
-            echo "  task admin USER=$user PASS=<pw>" >&2
-            exit 1
-            ;;
-        esac
-        case "$out" in
-          *"<result>"*)
-            echo "SOAP OK as '$user' (port $port). Worldserver replied:"
-            printf '%s\n' "$out" \
-              | sed -n '/<result>/,/<\/result>/p' \
-              | sed -e 's|.*<result>||' -e 's|</result>.*||' -e 's/&#xD;//g' \
-              | sed -e '/^[[:space:]]*$/d' -e 's/^/  /' | head -6
-            ;;
-          *)
-            echo "No usable reply from the worldserver SOAP API on port $port (HTTP ${code:-none})." >&2
-            echo "Is worldserver running? Check: task logs" >&2
-            exit 1
-            ;;
-        esac
+      - "{{.SS}} soap-check {{if .PORT}}--port {{.PORT}}{{end}}"
+

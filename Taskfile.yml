@@ -15,6 +15,7 @@ vars:
       pw=$(grep -E '^DOCKER_DB_ROOT_PASSWORD=' .env 2>/dev/null | cut -d= -f2- || true)
       echo "${pw:-password}"
   ACORE_DBS: acore_auth acore_world acore_characters
+  SS: python3 -m scripts.summonstack
 
 includes:
   admin:
@@ -51,18 +52,7 @@ tasks:
     desc: Make the bind-mounted config dirs writable by the container user (uid 1000)
     silent: true
     cmds:
-      - |
-        # The worldserver entrypoint runs as uid 1000 and copies the shipped
-        # module defaults into env/dist/etc/modules on every start, failing the
-        # container under `set -e` if it cannot write there. A fresh clone as
-        # root leaves the directory unwritable, so fix it before starting.
-        for dir in worldserver/modules; do
-          mkdir -p "$dir"
-          owner=$(stat -c '%u' "$dir")
-          if [ "$owner" != "1000" ]; then
-            chown -R 1000:1000 "$dir" && echo "  chowned $dir to uid 1000"
-          fi
-        done
+      - "{{.SS}} fix-perms"
 
   up:
     desc: Start the whole stack (playerbots realm too when PLAYERBOTS_MODE=1)
@@ -151,81 +141,21 @@ tasks:
   soap:check:
     desc: Verify the admin console credentials against the worldserver
     cmds:
-      - task: admin:soap-check
+      - task: admin:soap:check
 
   # ── Diagnostics & Setup ──────────────────────────────────────────────────
   doctor:
     desc: Check for stale images, missing .env, and container name clashes
     silent: true
     cmds:
-      - |
-        echo "── .env ──"
-        if [ -f .env ]; then
-          echo "  present"
-          if grep -q '^SESSION_SECRET=please-change-me' .env 2>/dev/null; then
-            echo "  WARNING: SESSION_SECRET is still the default — sessions are forgeable."
-          fi
-        else
-          echo "  MISSING — the stack is running on compose defaults, including"
-          echo "  the published default SESSION_SECRET. Run: task setup"
-        fi
-
-        echo "── image ages ──"
-        for img in acore/ac-wotlk-db-import:master \
-                   acore/ac-wotlk-worldserver:master \
-                   acore/ac-wotlk-authserver:master \
-                   acore/ac-wotlk-client-data:master; do
-          created=$(docker inspect "$img" --format '{{"{{"}}.Created{{"}}"}}' 2>/dev/null | cut -dT -f1)
-          printf '  %-40s %s\n' "$img" "${created:-not pulled}"
-        done
-        echo "  Mismatched dates cause schema errors (e.g. a worldserver that"
-        echo "  expects rbac_* tables an older importer never created)."
-        echo "  Fix with: task pull && task db:import"
-
-        echo "── config dir permissions ──"
-        for dir in worldserver/modules; do
-          if [ ! -d "$dir" ]; then
-            echo "  $dir MISSING — run: task fix-perms"
-          elif [ "$(stat -c '%u' "$dir")" != "1000" ]; then
-            echo "  $dir is not writable by uid 1000 — worldservers will exit"
-            echo "  on start (the entrypoint copies module defaults into it)."
-            echo "  Fix with: task fix-perms"
-          else
-            echo "  ok"
-          fi
-        done
-
-        echo "── realms ──"
-        # realm:check exits non-zero when it finds drift, which is a report
-        # here rather than a doctor failure. Task's own wrapper line is dropped;
-        # anything the check itself wrote is kept.
-        task realm:check 2>&1 | grep -v '^task: Failed to run task' | sed 's/^/  /' || true
-
-        echo "── container name clashes ──"
-        clash=$(docker ps -a --filter "name=^/ac-" \
-          --format '{{"{{"}}.Names{{"}}"}} {{"{{"}}.Label "com.docker.compose.project"{{"}}"}}' \
-          | awk '$2 != "summonstack" && $2 != "" {print "  " $1 " belongs to project: " $2}')
-        if [ -n "$clash" ]; then
-          echo "$clash"
-          echo "  container_name is global, so these block this stack from starting."
-        else
-          echo "  none"
-        fi
+      - "{{.SS}} doctor"
 
   setup:
     desc: Create .env with a random session secret (safe to re-run)
     status:
       - test -f .env
     cmds:
-      - cp .env.example .env
-      - |
-        existing_pw="password"
-        sed -i "s|^DOCKER_DB_ROOT_PASSWORD=.*|DOCKER_DB_ROOT_PASSWORD=${existing_pw}|" .env
-        secret=$(openssl rand -base64 48 | tr -d '\n')
-        sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=${secret}|" .env
-        echo "Wrote .env with a random SESSION_SECRET."
-        echo "DOCKER_DB_ROOT_PASSWORD left as '${existing_pw}' to match the existing"
-        echo "MySQL volume — changing it needs an ALTER USER, not just this file."
+      - "{{.SS}} setup"
 
   # ── Reset ────────────────────────────────────────────────────────────────
   reset:
