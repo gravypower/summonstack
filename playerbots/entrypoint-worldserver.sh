@@ -95,9 +95,10 @@ _set_str "BindIP"       "${AC_BIND_IP:-0.0.0.0}"
 _set "SOAP.Enabled" "${AC_SOAP_ENABLED:-0}"
 _set_str "SOAP.IP"  "${AC_SOAP_IP:-0.0.0.0}"
 
-# Auto-import databases on first start.
-_set "Updates.AutoSetup"       "0"
+# Auto-import disabled since base playerbots tables and updates are initialized directly.
+_set "Updates.AutoSetup"       "${AC_UPDATES_AUTO_SETUP:-0}"
 _set "Updates.EnableDatabases" "${AC_UPDATES_ENABLE_DBS:-0}"
+
 
 # Copy to default expected path /usr/local/etc/worldserver.conf as well
 cp "$CONF" /usr/local/etc/worldserver.conf

@@ -64,13 +64,7 @@ def service_for(realm: Realm) -> dict[str, Any]:
     }
 
     if realm.type == "playerbots":
-        service["build"] = {
-            "context": "./playerbots",
-            # The ALE variant, so playerbot realms run the same Lua scripts as
-            # every other realm. Built by `task realm:build REALM=pb`.
-            "dockerfile": "Dockerfile.ale",
-            "target": "worldserver",
-        }
+        service["image"] = "summonstack-ac-pb-worldserver:latest"
         environment["AC_TEMP_DIR"] = "/azerothcore/env/dist/temp"
         environment["AC_PLAYERBOTS_DATABASE_INFO"] = _db_info(realm.chars_db)
         environment.update(PLAYERBOT_DEFAULTS)

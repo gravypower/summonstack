@@ -21,7 +21,7 @@ interface Product {
   name: string;
   description: string | null;
   price: number;
-  deliveryType: "level_boost" | "profession_boost" | "item_pack" | "xp_lock";
+  deliveryType: "level_boost" | "profession_boost" | "item_pack" | "xp_lock" | "playerbot_slot";
   boostLevel: number | null;
   lockAction: "lock" | "release" | null;
   /** null on a lock product means "hold them at whatever level they are". */
@@ -208,7 +208,9 @@ export default function ShopPage() {
               ? product.lockAction === "release"
                 ? `${t.characterName} is gaining experience again.`
                 : `${t.characterName}'s experience is locked — the game picks it up within a few seconds.`
-              : `Delivered to ${t.characterName}!`,
+              : product.deliveryType === "playerbot_slot"
+                ? `Playerbot access unlocked for ${t.characterName}! Head over to the Playerbots tab to manage your bot.`
+                : `Delivered to ${t.characterName}!`,
       });
     } else if (t.status === "refunded") {
       setMsg({

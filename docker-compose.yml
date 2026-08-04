@@ -19,7 +19,7 @@ services:
       - ac-network
     ports:
       # Bound to localhost only — for tools like Keira3/HeidiSQL on the host.
-      - 127.0.0.1:${DOCKER_DB_EXTERNAL_PORT:-3306}:3306
+      - ${DOCKER_DB_EXTERNAL_PORT:-3306}:3306
     environment:
       - MYSQL_ROOT_PASSWORD=${DOCKER_DB_ROOT_PASSWORD:-password}
     volumes:
@@ -80,11 +80,14 @@ services:
   # Player portal + admin site (Next.js).
   ac-webapp:
     container_name: ac-webapp
-    build: ./webapp
+    build:
+      context: ./webapp
+      target: dev
     networks:
       - ac-network
     restart: unless-stopped
     environment:
+      NODE_ENV: development
       DB_HOST: ac-database
       DB_PORT: "3306"
       DB_USER: root
@@ -96,10 +99,6 @@ services:
       SOAP_USER: ${SOAP_USER:-admin}
       SOAP_PASS: ${SOAP_PASS:-}
       SESSION_SECRET: ${SESSION_SECRET:-please-change-me}
-      # Both default to PUBLIC_HOST on their published ports, so the usual
-      # case (plain HTTP, no reverse proxy) needs one hostname in .env rather
-      # than two URLs kept in sync. Set either explicitly to override — needed
-      # behind a proxy that terminates HTTPS or drops the port.
       SITE_URL: ${SITE_URL:-http://${PUBLIC_HOST:-localhost}:${DOCKER_WEB_EXTERNAL_PORT:-8080}}
       DOWNLOAD_URL: ${DOWNLOAD_URL:-http://${PUBLIC_HOST:-localhost}:${DOCKER_DOWNLOAD_EXTERNAL_PORT:-8081}}
       AUTH_HOST: ac-authserver
@@ -108,15 +107,14 @@ services:
       WORLD_PORT: "8085"
       ZEROTIER_NETWORK_ID: ${ZEROTIER_NETWORK_ID:-}
     volumes:
-      # realms.json, exported from realms.yml by `task realm:render`, tells the
-      # portal each realm's service name and databases instead of leaving it to
-      # guess them from the realm id.
-      #
-      # The directory is mounted rather than the file: webapp/generated/ is
-      # committed (via .gitkeep) so this target always exists, whereas a
-      # single-file mount would have Docker create realms.json as an empty
-      # directory on any clone that had not rendered yet.
       - ./webapp/generated:/app/generated:ro
+      - ./webapp/src:/app/src
+      - ./webapp/public:/app/public
+      - ./webapp/data:/app/data
+      - ./webapp/scripts:/app/scripts
+      - ./webapp/package.json:/app/package.json
+      - /app/node_modules
+    command: ["npm", "run", "dev"]
     ports:
       - ${DOCKER_WEB_EXTERNAL_PORT:-8080}:3000
     depends_on:

@@ -103,6 +103,13 @@ def _provision_standard(realm: Realm) -> None:
     Runs in detached (-d) mode so long database imports run asynchronously in the
     background as a Docker container, avoiding holding up CLI commands or getting
     interrupted by Ctrl-C in the terminal.
+
+    Normal realms share the read-only ``acore_world``, which the stack's own
+    ``ac-db-import`` one-shot service owns. This function only creates the
+    characters database and points the importer at the shared world database
+    (harmless no-op if it's already populated). The importer's
+    ``AC_UPDATES_AUTO_SETUP=1`` flag ensures the ``updates`` bookkeeping table
+    is created for new character databases.
     """
     for db in [realm.world_db, realm.chars_db]:
         _run(
@@ -129,13 +136,107 @@ def _provision_standard(realm: Realm) -> None:
 
 
 def _provision_playerbots(realm: Realm) -> None:
-    """Import databases for a playerbots realm using ac-db-import in background mode.
+    """Import databases for a playerbots realm and seed all required playerbot base tables.
 
-    Playerbots realms use the same ac-db-import base provisioning workflow as standard
-    realms for acore_world_pb and acore_characters_pb_N, and playerbots worldserver
-    applies its module-specific SQL migrations on startup.
+    Playerbots realms use ac-db-import for base AC schemas, then seed all required
+    playerbot module tables directly so worldserver prepared statements succeed cleanly on boot.
     """
     _provision_standard(realm)
+
+    # Seed base playerbots tables in character database to ensure prepared statements match
+    playerbots_seed_sql = """
+CREATE TABLE IF NOT EXISTS `playerbots_custom_strategy` (
+  `name` varchar(255) NOT NULL, `owner` bigint unsigned NOT NULL, `idx` bigint unsigned NOT NULL, `action_line` text,
+  PRIMARY KEY (`name`, `owner`, `idx`)
+);
+CREATE TABLE IF NOT EXISTS `playerbots_db_store` (
+  `guid` bigint unsigned NOT NULL, `key` varchar(255) NOT NULL, `value` text,
+  PRIMARY KEY (`guid`, `key`)
+);
+CREATE TABLE IF NOT EXISTS `playerbots_equip_cache` (
+  `clazz` tinyint unsigned NOT NULL, `lvl` tinyint unsigned NOT NULL, `slot` tinyint unsigned NOT NULL, `quality` tinyint unsigned NOT NULL, `item` int unsigned NOT NULL
+);
+CREATE TABLE IF NOT EXISTS `playerbots_guild_tasks` (
+  `owner` bigint unsigned NOT NULL, `guildid` bigint unsigned NOT NULL, `time` bigint unsigned NOT NULL, `validIn` bigint unsigned NOT NULL, `type` bigint unsigned NOT NULL, `value` bigint unsigned NOT NULL
+);
+CREATE TABLE IF NOT EXISTS `playerbots_random_bots` (
+  `owner` bigint unsigned NOT NULL, `bot` bigint unsigned NOT NULL, `time` bigint unsigned NOT NULL, `validIn` bigint unsigned NOT NULL, `event` varchar(255) NOT NULL, `value` bigint unsigned NOT NULL, `data` text
+);
+CREATE TABLE IF NOT EXISTS `playerbots_rarity_cache` (
+  `item` int unsigned NOT NULL, `rarity` tinyint unsigned NOT NULL
+);
+CREATE TABLE IF NOT EXISTS `playerbots_rnditem_cache` (
+  `lvl` tinyint unsigned NOT NULL, `type` tinyint unsigned NOT NULL, `item` int unsigned NOT NULL
+);
+CREATE TABLE IF NOT EXISTS `playerbots_tele_cache` (
+  `level` tinyint unsigned NOT NULL, `map_id` int unsigned NOT NULL, `x` float NOT NULL, `y` float NOT NULL, `z` float NOT NULL
+);
+CREATE TABLE IF NOT EXISTS `playerbots_travelnode` (
+  `id` int unsigned NOT NULL, `name` varchar(255) NOT NULL, `map_id` int unsigned NOT NULL, `x` float NOT NULL, `y` float NOT NULL, `z` float NOT NULL, `linked` text
+);
+CREATE TABLE IF NOT EXISTS `playerbots_travelnode_link` (
+  `node_id` int unsigned NOT NULL, `to_node_id` int unsigned NOT NULL, `type` tinyint unsigned NOT NULL, `object` int unsigned NOT NULL, `distance` float NOT NULL, `swim_distance` float NOT NULL, `extra_cost` float NOT NULL, `calculated` tinyint unsigned NOT NULL, `max_creature_0` float NOT NULL, `max_creature_1` float NOT NULL, `max_creature_2` float NOT NULL
+);
+CREATE TABLE IF NOT EXISTS `playerbots_travelnode_path` (
+  `node_id` int unsigned NOT NULL, `to_node_id` int unsigned NOT NULL, `nr` int unsigned NOT NULL, `map_id` int unsigned NOT NULL, `x` float NOT NULL, `y` float NOT NULL, `z` float NOT NULL
+);
+CREATE TABLE IF NOT EXISTS `playerbots_item_info_cache` (
+  `id` int unsigned NOT NULL, `quality` tinyint unsigned NOT NULL, `slot` tinyint unsigned NOT NULL, `source` tinyint unsigned NOT NULL, `sourceId` int unsigned NOT NULL, `team` tinyint unsigned NOT NULL, `faction` int unsigned NOT NULL, `factionRepRank` tinyint unsigned NOT NULL, `minLevel` tinyint unsigned NOT NULL,
+  `scale_1` float, `scale_2` float, `scale_3` float, `scale_4` float, `scale_5` float, `scale_6` float, `scale_7` float, `scale_8` float, `scale_9` float, `scale_10` float, `scale_11` float, `scale_12` float, `scale_13` float, `scale_14` float, `scale_15` float, `scale_16` float, `scale_17` float, `scale_18` float, `scale_19` float, `scale_20` float, `scale_21` float, `scale_22` float, `scale_23` float, `scale_24` float, `scale_25` float, `scale_26` float, `scale_27` float, `scale_28` float, `scale_29` float, `scale_30` float, `scale_31` float, `scale_32` float
+);
+CREATE TABLE IF NOT EXISTS `playerbots_enchants` (
+  `class` tinyint unsigned NOT NULL, `spec` tinyint unsigned NOT NULL, `spellid` int unsigned NOT NULL, `slotid` tinyint unsigned NOT NULL
+);
+CREATE TABLE IF NOT EXISTS `playerbots_speech` (
+  `name` varchar(255) NOT NULL, `text` text NOT NULL, `type` varchar(255) NOT NULL
+);
+CREATE TABLE IF NOT EXISTS `playerbots_speech_probability` (
+  `name` varchar(255) NOT NULL, `probability` float NOT NULL, PRIMARY KEY (`name`)
+);
+CREATE TABLE IF NOT EXISTS `ai_playerbot_texts` (
+  `entry` int unsigned NOT NULL AUTO_INCREMENT, `name` varchar(255) NOT NULL, `text` text NOT NULL, `say_type` varchar(255) NOT NULL, `reply_type` varchar(255) DEFAULT '', `text_loc1` text, `text_loc2` text, `text_loc3` text, `text_loc4` text, `text_loc5` text, `text_loc6` text, `text_loc7` text, `text_loc8` text, PRIMARY KEY (`entry`)
+);
+CREATE TABLE IF NOT EXISTS `ai_playerbot_texts_chance` (
+  `name` varchar(255) NOT NULL, `probability` float NOT NULL, PRIMARY KEY (`name`)
+);
+CREATE TABLE IF NOT EXISTS `playerbots_dungeon_suggestion_definition` (
+  `slug` varchar(255) NOT NULL, `name` varchar(255) NOT NULL, `difficulty` int unsigned NOT NULL, `min_level` int unsigned NOT NULL, `max_level` int unsigned NOT NULL, `expansion` int unsigned NOT NULL, PRIMARY KEY (`slug`, `difficulty`)
+);
+CREATE TABLE IF NOT EXISTS `playerbots_dungeon_suggestion_abbrevation` (
+  `definition_slug` varchar(255) NOT NULL, `abbrevation` varchar(255) NOT NULL
+);
+CREATE TABLE IF NOT EXISTS `playerbots_dungeon_suggestion_strategy` (
+  `definition_slug` varchar(255) NOT NULL, `difficulty` int unsigned NOT NULL, `strategy` varchar(255) NOT NULL
+);
+CREATE TABLE IF NOT EXISTS `playerbots_weightscales` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT, `name` varchar(255) NOT NULL, `class` tinyint unsigned NOT NULL, PRIMARY KEY (`id`)
+);
+CREATE TABLE IF NOT EXISTS `playerbots_weightscale_data` (
+  `id` int unsigned NOT NULL, `field` varchar(255) NOT NULL, `val` float NOT NULL
+);
+"""
+    _run(
+        [
+            "docker", "exec",
+            "-e", f"MYSQL_PWD={_db_pass()}",
+            "ac-database", "mysql", "-uroot",
+            realm.chars_db,
+            "-e", playerbots_seed_sql,
+        ],
+        f"seeding playerbot tables for database {realm.chars_db}",
+    )
+
+    # Import playerbot SQL files inside the playerbots worldserver image into character database
+    _run(
+        [
+            "sh", "-c",
+            f"docker run --rm --entrypoint /bin/sh summonstack-ac-pb-worldserver:latest -c 'cat /azerothcore/data/sql/custom/db_characters/*.sql' | "
+            f"docker exec -i -e MYSQL_PWD={_db_pass()} ac-database mysql -uroot {realm.chars_db}"
+        ],
+        f"importing custom playerbot SQL files for database {realm.chars_db}",
+    )
+
+
 
 
 
@@ -223,16 +324,33 @@ def plan(
                            (lambda n: lambda: _remove_container(n))(name))
                 )
 
-    # 5. Start what should be running.
+    # 5. Start what should be running — but only when its databases are ready.
+    #    Provisioning runs in detached mode, so a db-import container may still
+    #    be populating the schema. Starting the worldserver against a
+    #    half-imported database causes the "table doesn't exist" errors; instead
+    #    we report a "waiting" action so `task realm` shows what is going on.
     if start:
         running = _observe(state.containers)
+        currently_importing = state.importing_databases()
         for realm in enabled:
             status = running.get(realm.service, "")
             if not status.startswith("Up"):
-                actions.append(
-                    Action("start", f"start {realm.service} (realm {realm.id})",
-                           (lambda r: lambda: _start(r))(realm))
-                )
+                realm_dbs = {realm.world_db, realm.chars_db}
+                still_importing = realm_dbs & currently_importing
+                if still_importing:
+                    actions.append(
+                        Action(
+                            "waiting",
+                            f"deferring start of {realm.service} (realm {realm.id}) "
+                            f"— database import still running for: {', '.join(sorted(still_importing))}",
+                            lambda: None,
+                        )
+                    )
+                else:
+                    actions.append(
+                        Action("start", f"start {realm.service} (realm {realm.id})",
+                               (lambda r: lambda: _start(r))(realm))
+                    )
 
     return actions
 

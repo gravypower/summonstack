@@ -212,9 +212,9 @@ tasks:
         # like every other one. If ALE ever fails to compile against the
         # playerbots fork, point the service's build.dockerfile back at
         # playerbots/Dockerfile to get a working realm without Lua.
-        echo "Building playerbots worldserver from source (30-60 min uncached)..."
+        echo "Building playerbots worldserver from source..."
         BUILDX_NO_DEFAULT_ATTESTATIONS=1 \
-          docker compose --profile playerbots build ac-pb-worldserver
+          docker build -t summonstack-ac-pb-worldserver:latest -f playerbots/Dockerfile.ale playerbots
         echo "Build complete."
 
   set-addr:

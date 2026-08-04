@@ -56,7 +56,7 @@ const DDL = [
      name VARCHAR(128) NOT NULL,
      description TEXT NULL,
      price INT UNSIGNED NOT NULL,
-     delivery_type ENUM('level_boost','profession_boost','item_pack','xp_lock') NOT NULL,
+     delivery_type ENUM('level_boost','profession_boost','item_pack','xp_lock','playerbot_slot') NOT NULL,
      payload JSON NOT NULL,
      enabled TINYINT(1) NOT NULL DEFAULT 1,
      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -122,11 +122,20 @@ const DDL = [
      MODIFY category ENUM('gear','consumable','bag') NOT NULL`,
   `ALTER TABLE \`${WEB_DB}\`.shop_products
      MODIFY delivery_type
-       ENUM('level_boost','profession_boost','item_pack','xp_lock') NOT NULL`,
+       ENUM('level_boost','profession_boost','item_pack','xp_lock','playerbot_slot') NOT NULL`,
 ];
 
 // Prices are starting points — tune them in shop_products, they survive reseeds.
 const PRODUCTS = [
+  {
+    slug: "playerbot-slot",
+    name: "Playerbot Access Token",
+    description:
+      "Unlock personal AI companion bot control for your account. Command bots to log in and join your party.",
+    price: 250,
+    delivery_type: "playerbot_slot",
+    payload: { max_bots: 1 },
+  },
   {
     slug: "level-boost-60",
     name: "Level 60 Boost",

@@ -59,18 +59,18 @@ const SHOP_DDL = [
      name VARCHAR(128) NOT NULL,
      description TEXT NULL,
      price INT UNSIGNED NOT NULL,
-     delivery_type ENUM('level_boost','profession_boost','item_pack','xp_lock') NOT NULL,
+     delivery_type ENUM('level_boost','profession_boost','item_pack','xp_lock','playerbot_slot') NOT NULL,
      payload JSON NOT NULL,
      enabled TINYINT(1) NOT NULL DEFAULT 1,
      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
      PRIMARY KEY (id),
      UNIQUE KEY uq_slug (slug)
    ) ENGINE=InnoDB`,
-  // 'xp_lock' was added after the first installs; CREATE TABLE IF NOT EXISTS
+  // 'xp_lock' and 'playerbot_slot' were added after the first installs; CREATE TABLE IF NOT EXISTS
   // above won't widen an existing enum, and re-running a MODIFY is harmless.
   `ALTER TABLE \`__WEB_DB__\`.shop_products
      MODIFY delivery_type
-       ENUM('level_boost','profession_boost','item_pack','xp_lock') NOT NULL`,
+       ENUM('level_boost','profession_boost','item_pack','xp_lock','playerbot_slot') NOT NULL`,
   // payload_snapshot freezes the resolved delivery (exact items for the
   // buyer's class/spec) so later catalog edits never change what was sold.
   `CREATE TABLE IF NOT EXISTS \`__WEB_DB__\`.shop_transactions (

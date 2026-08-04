@@ -28,6 +28,7 @@ export type Snapshot =
   | { type: "level_boost"; level: number }
   | { type: "profession_boost"; skillCap: number }
   | { type: "xp_lock"; action: "lock" | "release"; targetLevel: number }
+  | { type: "playerbot_slot"; maxBots: number }
   | {
       type: "item_pack";
       pack: string;
@@ -41,7 +42,7 @@ interface ProductRow extends RowDataPacket {
   name: string;
   description: string | null;
   price: number;
-  delivery_type: "level_boost" | "profession_boost" | "item_pack" | "xp_lock";
+  delivery_type: "level_boost" | "profession_boost" | "item_pack" | "xp_lock" | "playerbot_slot";
   payload: unknown;
 }
 
@@ -546,6 +547,11 @@ async function resolveSnapshot(
     return { type: "xp_lock", action, targetLevel: target };
   }
 
+  if (product.delivery_type === "playerbot_slot") {
+    const maxBots = Number(payload.max_bots ?? 1);
+    return { type: "playerbot_slot", maxBots };
+  }
+
   if (product.delivery_type === "profession_boost") {
     const skillCap = Number(payload.skill_cap ?? 450);
     if (character.online !== 0) {
@@ -642,7 +648,7 @@ export async function deliver(txnId: number): Promise<void> {
   try {
     // Address by the name freshly re-read by guid (renames since purchase),
     // and re-validate before it goes anywhere near a console command.
-    const name = await getCurrentCharacterName(txn.character_guid);
+    const name = await getCurrentCharacterName(txn.character_guid, txn.realm_id);
 
     if (snapshot.type === "level_boost") {
       // Works whether the character is online or offline.
@@ -674,6 +680,8 @@ export async function deliver(txnId: number): Promise<void> {
       await deliverProfessionBoost(txn.character_guid, snapshot.skillCap);
     } else if (snapshot.type === "xp_lock") {
       await deliverXpLock(txn, snapshot);
+    } else if (snapshot.type === "playerbot_slot") {
+      // playerbot_slot is recorded atomically in shop_transactions for the account.
     }
 
     await setStatus(txnId, "delivering", "delivered", null);
@@ -697,9 +705,14 @@ export async function deliver(txnId: number): Promise<void> {
   }
 }
 
-async function getCurrentCharacterName(guid: number): Promise<string> {
+async function getCurrentCharacterName(guid: number, realmId: number = 1): Promise<string> {
+  let charsDb = CHARS_DB;
+  if (realmId) {
+    const rConfig = await getRealmConfigById(realmId).catch(() => null);
+    if (rConfig?.charsDb) charsDb = rConfig.charsDb;
+  }
   const [rows] = await getPool().query<RowDataPacket[]>(
-    `SELECT name FROM \`${CHARS_DB}\`.characters
+    `SELECT name FROM \`${charsDb}\`.characters
       WHERE guid = ? AND deleteInfos_Account IS NULL`,
     [guid]
   );

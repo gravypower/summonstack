@@ -336,7 +336,7 @@ function legacyRealmConfig(id: number): RealmEndpoints {
   }
   return {
     charsDb: `acore_characters_${id}`,
-    worldDb: `acore_world_${id}`,
+    worldDb: "acore_world",
     soapUrl: `http://ac-realm${id}-worldserver:7878`,
     worldHost: `ac-realm${id}-worldserver`,
     worldPort: 8085,

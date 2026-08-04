@@ -166,3 +166,52 @@ def active_importers() -> dict[str, dict[str, str]]:
                     last_line = logs[-1].strip()
                 importers[name] = {"status": status_str, "last_log": last_line}
     return importers
+
+
+def importing_databases() -> set[str]:
+    """Database names actively being populated by a running db-import container.
+
+    Inspects the AC_*_DATABASE_INFO environment variables of every running
+    container whose name contains 'db-import'. The info string is the
+    AzerothCore semicolon-delimited format: ``host;port;user;pass;database``.
+
+    Returns the set of database names (e.g. ``{"acore_characters_1"}``).
+    """
+    res = subprocess.run(
+        [
+            "docker", "ps", "-q",
+            "--filter", "name=db-import",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if res.returncode != 0 or not res.stdout.strip():
+        return set()
+
+    ids = res.stdout.strip().splitlines()
+    dbs: set[str] = set()
+    for cid in ids:
+        inspect = subprocess.run(
+            [
+                "docker", "inspect",
+                "--format",
+                '{{range .Config.Env}}{{println .}}{{end}}',
+                cid.strip(),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if inspect.returncode != 0:
+            continue
+        for env_line in inspect.stdout.splitlines():
+            # AC_WORLD_DATABASE_INFO=host;port;user;pass;dbname
+            # AC_CHARACTER_DATABASE_INFO=host;port;user;pass;dbname
+            for prefix in ("AC_WORLD_DATABASE_INFO=", "AC_CHARACTER_DATABASE_INFO="):
+                if env_line.startswith(prefix):
+                    info = env_line[len(prefix):]
+                    parts = info.split(";")
+                    if len(parts) >= 5:
+                        dbs.add(parts[4])
+    return dbs

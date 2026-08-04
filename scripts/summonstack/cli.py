@@ -62,6 +62,10 @@ def cmd_list(args: argparse.Namespace) -> int:
     except state.StateError:
         table_counts = {}
     try:
+        currently_importing = state.importing_databases()
+    except state.StateError:
+        currently_importing = set()
+    try:
         importers = state.active_importers()
     except state.StateError:
         importers = {}
@@ -78,15 +82,18 @@ def cmd_list(args: argparse.Namespace) -> int:
                 live_status = f"Initializing ({live})"
         elif live:
             live_status = live
-        elif importers:
-            world_tables = table_counts.get(realm.world_db, 0)
-            live_status = f"importing DB ({realm.world_db}: {world_tables} tables)"
-        elif realm.world_db not in table_counts or table_counts[realm.world_db] < 20:
-            live_status = f"missing DB ({realm.world_db})"
-        elif realm.chars_db not in table_counts or table_counts[realm.chars_db] < 10:
-            live_status = f"missing DB ({realm.chars_db})"
         else:
-            live_status = "stopped"
+            # Not running — figure out why.
+            realm_dbs = {realm.world_db, realm.chars_db}
+            importing_now = realm_dbs & currently_importing
+            if importing_now:
+                live_status = f"importing DB ({', '.join(sorted(importing_now))})"
+            elif realm.world_db not in table_counts or table_counts[realm.world_db] < 20:
+                live_status = f"missing DB ({realm.world_db})"
+            elif realm.chars_db not in table_counts or table_counts[realm.chars_db] < 10:
+                live_status = f"missing DB ({realm.chars_db})"
+            else:
+                live_status = "stopped"
 
         if not realm.enabled:
             live_status = f"disabled ({live_status})"

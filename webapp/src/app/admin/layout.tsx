@@ -25,6 +25,7 @@ export default async function AdminLayout({
           <Link href="/admin/shop">Shop points</Link>
           <Link href="/admin/event">XP event</Link>
           <Link href="/admin/summons">Summons</Link>
+          <Link href="/admin/playerbots">Playerbots</Link>
           <Link href="/admin/realm">Realm</Link>
           <Link href="/admin/console">Console</Link>
         </nav>

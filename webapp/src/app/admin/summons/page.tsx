@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import PlayerAutocomplete from "@/app/components/player-autocomplete";
 
 interface SummonRewards {
   enabled: boolean;
@@ -375,15 +376,16 @@ export default function AdminSummonsPage() {
           summoning them worth nothing, which shuts down one farm without
           turning rewards off for the realm.
         </p>
-        <div className="row">
-          <input
-            className="input"
-            style={{ maxWidth: 200 }}
-            placeholder="Account name"
-            value={bonusUser}
-            onChange={(e) => setBonusUser(e.target.value)}
-            required
-          />
+        <div className="row" style={{ flexWrap: "wrap", gap: "0.75rem" }}>
+          <div style={{ flex: 1, minWidth: "180px", maxWidth: "240px" }}>
+            <PlayerAutocomplete
+              value={bonusUser}
+              onChange={(val) => setBonusUser(val)}
+              placeholder="Account name..."
+              typeFilter="account"
+              required
+            />
+          </div>
           <input
             className="input mono"
             style={{ maxWidth: 110 }}

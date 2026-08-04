@@ -54,18 +54,6 @@ RUN git clone --depth=1 \
         https://github.com/mod-playerbots/mod-playerbots.git \
         /azerothcore/modules/mod-playerbots
 
-# Copy module SQL into AzerothCore's custom SQL directories so they are
-# included when the worldserver self-populates the databases on first start.
-# Per the mod-playerbots Docker Installation Guide:
-#   cp modules/mod-playerbots/sql/characters/base/*.sql data/sql/custom/db_characters/
-#   cp modules/mod-playerbots/sql/world/base/*.sql      data/sql/custom/db_world/
-RUN mkdir -p /azerothcore/data/sql/custom/db_characters \
-             /azerothcore/data/sql/custom/db_world && \
-    find /azerothcore/modules/mod-playerbots/data/sql/playerbots /azerothcore/modules/mod-playerbots/data/sql/characters -name '*.sql' \
-         -exec cp {} /azerothcore/data/sql/custom/db_characters/ \; 2>/dev/null || true && \
-    find /azerothcore/modules/mod-playerbots/data/sql/world -name '*.sql' \
-         -exec cp {} /azerothcore/data/sql/custom/db_world/ \; 2>/dev/null || true
-
 WORKDIR /azerothcore
 
 # Configure.
@@ -88,6 +76,7 @@ RUN cmake --build build -j${BUILD_JOBS:-$(nproc)} \
 # ── Everything below is what ./Dockerfile does not do ────────────────────────
 
 ARG ALE_BRANCH=master
+ARG MULTIBOT_BRANCH=main
 # lua52 matches the official acore worldserver image, which statically links
 # Lua 5.2.4 — so scripts behave the same on every realm. It is also mod-ale's
 # default and vendors its own Lua, needing no extra apt packages. luajit is
@@ -99,9 +88,14 @@ RUN git clone --depth=1 \
         https://github.com/azerothcore/mod-ale.git \
         /azerothcore/modules/mod-ale
 
-# Re-configure so cmake sees the new module, then build into the same directory
+RUN git clone --depth=1 \
+        --branch="${MULTIBOT_BRANCH}" \
+        https://github.com/Wishmaster117/mod-multibot-bridge.git \
+        /azerothcore/modules/mod-multibot-bridge
+
+# Re-configure so cmake sees the new modules, then build into the same directory
 # the step above left behind: the core's object files are still there, so this
-# compiles mod-ale and relinks rather than starting over.
+# compiles mod-ale and mod-multibot-bridge and relinks rather than starting over.
 RUN cmake . -B build \
         -DCMAKE_BUILD_TYPE=RelWithDebInfo \
         -DCMAKE_C_COMPILER=clang \
@@ -113,6 +107,16 @@ RUN cmake . -B build \
         -DLUA_VERSION=${LUA_VERSION} \
     && cmake --build build -j${BUILD_JOBS:-$(nproc)} \
     && cmake --install build --prefix /azerothcore/env/dist
+
+# Copy module SQL into AzerothCore's custom SQL directories so they are
+# included when the worldserver self-populates the databases on first start.
+RUN mkdir -p /azerothcore/data/sql/custom/db_characters \
+             /azerothcore/data/sql/custom/db_world && \
+    cp /azerothcore/modules/mod-playerbots/data/sql/characters/base/*.sql /azerothcore/data/sql/custom/db_characters/ 2>/dev/null || true && \
+    cp /azerothcore/modules/mod-playerbots/data/sql/playerbots/base/*.sql /azerothcore/data/sql/custom/db_characters/ 2>/dev/null || true && \
+    cp /azerothcore/modules/mod-playerbots/data/sql/world/base/*.sql /azerothcore/data/sql/custom/db_world/ 2>/dev/null || true && \
+    find /azerothcore/modules/mod-multibot-bridge -name '*.sql' -path '*/characters/*' -exec cp {} /azerothcore/data/sql/custom/db_characters/ \; 2>/dev/null || true && \
+    find /azerothcore/modules/mod-multibot-bridge -name '*.sql' -path '*/world/*' -exec cp {} /azerothcore/data/sql/custom/db_world/ \; 2>/dev/null || true
 
 # ── Stage 2: Worldserver runtime ─────────────────────────────────────────────
 FROM ubuntu:22.04 AS worldserver

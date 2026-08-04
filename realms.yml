@@ -20,7 +20,7 @@ defaults:
   address: ${PUBLIC_HOST:-192.168.195.69}
 realms:
 - id: 1
-  name: Realm 1
+  name: SummonCore
   type: normal
   service: ac-realm-1
   managed: generated
@@ -28,21 +28,12 @@ realms:
   soap_port: 7878
   world_db: acore_world
   chars_db: acore_characters_1
-- id: 4
-  name: Playerbots Realm 4
+- id: 2
+  name: Playerbots Realm 2
   type: playerbots
-  service: ac-pb-realm-4
+  service: ac-pb-realm-2
   managed: generated
-  game_port: 8088
-  soap_port: 7881
+  game_port: 8086
+  soap_port: 7879
   world_db: acore_world_pb
-  chars_db: acore_characters_pb_4
-- id: 5
-  name: Playerbots Realm 5
-  type: playerbots
-  service: ac-pb-realm-5
-  managed: generated
-  game_port: 8089
-  soap_port: 7882
-  world_db: acore_world_pb
-  chars_db: acore_characters_pb_5
+  chars_db: acore_characters_pb_2

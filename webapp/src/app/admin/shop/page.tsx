@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import PlayerAutocomplete from "@/app/components/player-autocomplete";
 
 interface Balance {
   account_id: number;
@@ -79,15 +80,16 @@ export default function AdminShopPage() {
     <>
       <form className="card" onSubmit={grant}>
         <h2>Grant points</h2>
-        <div className="row">
-          <input
-            className="input"
-            style={{ maxWidth: 200 }}
-            placeholder="Account name"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            required
-          />
+        <div className="row" style={{ flexWrap: "wrap", gap: "0.75rem" }}>
+          <div style={{ flex: 1, minWidth: "200px", maxWidth: "260px" }}>
+            <PlayerAutocomplete
+              value={username}
+              onChange={(val) => setUsername(val)}
+              placeholder="Account name..."
+              typeFilter="account"
+              required
+            />
+          </div>
           <input
             className="input"
             style={{ maxWidth: 130 }}
