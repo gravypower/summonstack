@@ -119,51 +119,40 @@ export default function AdminPlayerbotsPage() {
             <button
               className="btn secondary"
               disabled={busy}
-              onClick={() => executeSoapCommand("playerbots rndbot init")}
+              onClick={() => executeSoapCommand("playerbots rndbot update")}
             >
-              Init Random Bots
+              Force Bot Update
             </button>
             <button
               className="btn secondary"
               disabled={busy}
-              onClick={() => executeSoapCommand("playerbots rndbot refresh")}
+              onClick={() => executeSoapCommand("playerbots rndbot reload")}
             >
-              Refresh Bot Roster
+              Reload Bot Config
             </button>
           </div>
         </div>
 
         {/* Quick Action Presets */}
         <div className="card" style={{ background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.1)", margin: 0 }}>
-          <h3>Initialize & Spawn Bots</h3>
+          <h3>Random Bot Controls</h3>
           <p className="muted" style={{ fontSize: "0.875rem" }}>
-            Instantly spawn a fixed batch of random playerbots into the world.
+            Query server bot statistics or trigger immediate random bot updates.
           </p>
-          <div className="field" style={{ marginBottom: "1rem" }}>
-            <span>Bot Count</span>
-            <input
-              type="number"
-              className="input mono"
-              value={botCount}
-              min={1}
-              max={500}
-              onChange={(e) => setBotCount(Math.max(1, parseInt(e.target.value) || 1))}
-            />
-          </div>
-          <div className="row" style={{ gap: "0.5rem" }}>
+          <div className="row" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
             <button
               className="btn"
               disabled={busy}
-              onClick={() => executeSoapCommand(`playerbots initbots ${botCount}`)}
+              onClick={() => executeSoapCommand("playerbots rndbot stats")}
             >
-              Init {botCount} Bots
+              Bot Statistics
             </button>
             <button
               className="btn secondary"
               disabled={busy}
-              onClick={() => executeSoapCommand("playerbots initbots")}
+              onClick={() => executeSoapCommand("playerbots rndbot update")}
             >
-              Init (Default Count)
+              Tick Bot AI
             </button>
           </div>
         </div>
