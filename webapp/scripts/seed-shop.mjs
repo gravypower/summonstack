@@ -240,6 +240,15 @@ const PRODUCTS = [
     delivery_type: "item_pack",
     payload: { pack: "wotlk-raid" },
   },
+  {
+    slug: "summon-stone",
+    name: "Summoning Stone",
+    description:
+      "A consumable that spawns a warlock and summoning portal — summon any online player to your location, no group required. Counted for summon rewards.",
+    price: 100,
+    delivery_type: "item_pack",
+    payload: { pack: "summon-stone" },
+  },
 ];
 
 function loadPackFiles() {

@@ -28,7 +28,7 @@ def _render_all(manifest: mf.Manifest) -> list[str]:
     Kept in one place so adding a realm can never update the compose override
     while leaving the portal's copy behind.
     """
-    return [compose.write_override(manifest), portal.write(manifest)]
+    return [compose.write_override(manifest), portal.write(manifest), compose.write_mysql_config()]
 
 
 def _load() -> mf.Manifest:

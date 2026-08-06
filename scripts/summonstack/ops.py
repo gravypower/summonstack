@@ -62,7 +62,147 @@ def doctor() -> int:
     """Run full diagnostic checks across environment, active operations, databases, images, permissions, and containers."""
     env = load_env()
 
-    print("── active operations ──")
+    from . import hardware
+    total_cores = hardware.available_cores()
+    mem_gb = hardware.available_memory_gb()
+    buffer_pool_mb = hardware.mysql_buffer_pool_mb(mem_gb)
+
+    print("── system resources ──")
+    print(f"  CPU:  {total_cores} cores")
+    print(f"  RAM:  {mem_gb:.1f} GB ({buffer_pool_mb / 1024:.1f} GB → MySQL buffer pool)")
+
+    print("\n── container resources ──")
+    print(f"  {'SERVICE':<18} {'STATUS':<8} {'CPU (cores)':<14} {'RAM':<11} {'LOAD'}")
+    
+    ps_res = subprocess.run(
+        ["docker", "ps", "-a", "--filter", "name=^/?ac-", "--format", "{{.Names}}\t{{.State}}"],
+        capture_output=True, text=True, check=False,
+    )
+    
+    total_cores_used = 0.0
+    
+    if ps_res.returncode == 0 and ps_res.stdout.strip():
+        containers = {}
+        for line in ps_res.stdout.strip().splitlines():
+            parts = line.split("\t")
+            if len(parts) == 2:
+                containers[parts[0]] = parts[1]
+                
+        stats_res = subprocess.run(
+            ["docker", "stats", "--no-stream", "--format", "{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}"] + list(containers.keys()),
+            capture_output=True, text=True, check=False,
+        )
+        
+        stats = {}
+        if stats_res.returncode == 0:
+            for line in stats_res.stdout.strip().splitlines():
+                parts = line.split("\t")
+                if len(parts) >= 3:
+                    stats[parts[0]] = {"cpu": parts[1], "mem": parts[2].split(" / ")[0]}
+                    
+        for name, state in containers.items():
+            is_up = state == "running"
+            status = "● up" if is_up else "○ down"
+            
+            if is_up and name in stats:
+                cpu_str = stats[name]["cpu"].replace("%", "")
+                try:
+                    cpu_perc = float(cpu_str)
+                    cores_used = cpu_perc / 100.0
+                    total_cores_used += cores_used
+                    cpu_display = f"{cores_used:.1f} / {total_cores}"
+                    
+                    load_pct = min(100, int((cores_used / total_cores) * 100))
+                    blocks = int(load_pct / 10)
+                    bar = "█" * blocks + "░" * (10 - blocks)
+                    load_display = f"{bar} {load_pct:>2}%"
+                except ValueError:
+                    cpu_display = "err"
+                    load_display = "err"
+                
+                mem_display = stats[name]["mem"]
+            else:
+                cpu_display = "—"
+                mem_display = "—"
+                load_display = ""
+                
+            print(f"  {name:<18} {status:<8} {cpu_display:<14} {mem_display:<11} {load_display}")
+            
+    else:
+        print("  no summonstack containers found")
+        
+    headroom_cores = max(0.0, total_cores - total_cores_used)
+    headroom_pct = int((headroom_cores / total_cores) * 100) if total_cores > 0 else 0
+    print(f"\n  Headroom: {headroom_cores:.1f} cores idle ({headroom_pct}%)")
+
+    print("\n── thread allocation ──")
+    try:
+        manifest = mf.load()
+        overrides = compose.compose_services()
+        if os.path.exists(compose.OVERRIDE_PATH):
+            overrides.update(compose.compose_services(compose.OVERRIDE_PATH))
+        
+        has_realms = False
+        for realm in manifest.realms:
+            service_name = realm.service
+            if service_name in overrides:
+                has_realms = True
+                svc_env = overrides[service_name].get("environment", {})
+                
+                map_t = svc_env.get("AC_MAP_UPDATE_THREADS", "?")
+                net_t = svc_env.get("AC_NETWORK_THREADS", "?")
+                pool_t = svc_env.get("AC_THREAD_POOL", "?")
+                db_t = svc_env.get("AC_PLAYERBOTS_DATABASE_WORKER_THREADS", "N/A")
+                
+                print(f"  {service_name} ({realm.type}):")
+                if realm.type == "playerbots":
+                    print(f"    Map: {map_t} threads | Network: {net_t} threads | DB Worker: {db_t} threads | ThreadPool: {pool_t}")
+                else:
+                    print(f"    Map: {map_t} threads | Network: {net_t} threads | ThreadPool: {pool_t}")
+                    
+        if not has_realms:
+            print("  no realms defined in manifest/override")
+    except Exception as e:
+        print(f"  could not read thread allocation: {e}")
+
+
+    print("\n── database congestion ──")
+    try:
+        db_pass = env.get("DOCKER_DB_ROOT_PASSWORD", "password")
+        res = subprocess.run(
+            ["docker", "exec", "ac-database", "mysql", "-u", "root", f"-p{db_pass}", "-e", "SHOW PROCESSLIST;"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if res.returncode == 0:
+            lines = res.stdout.splitlines()
+            # MySQL might output a warning on the first line about password on CLI
+            if lines and lines[0].startswith("mysql: [Warning]"):
+                lines = lines[1:]
+            if lines:
+                headers = lines[0]
+                active = []
+                for line in lines[1:]:
+                    # Skip idle connections, background threads, and this exact query
+                    if "Sleep" in line or "Daemon" in line or "Binlog" in line or "SHOW PROCESSLIST" in line:
+                        continue
+                    active.append(line)
+                if active:
+                    print("  Active queries (potential congestion):")
+                    print(f"  {headers}")
+                    for line in active:
+                        print(f"  {line}")
+                else:
+                    print("  none (all connections idle)")
+            else:
+                print("  no output from processlist")
+        else:
+            print("  could not connect to mysql to check congestion (is ac-database running?)")
+    except Exception as e:
+        print(f"  error checking database: {e}")
+
+    print("\n── active operations ──")
     try:
         from . import state
         importers = state.active_importers()

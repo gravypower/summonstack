@@ -24,6 +24,7 @@ services:
       - MYSQL_ROOT_PASSWORD=${DOCKER_DB_ROOT_PASSWORD:-password}
     volumes:
       - ac-database:/var/lib/mysql
+      - ./database/summonstack.cnf:/etc/mysql/conf.d/summonstack.cnf:ro
     restart: unless-stopped
     healthcheck:
       test: "/usr/bin/mysql --user=root --password=$$MYSQL_ROOT_PASSWORD --execute \"SHOW DATABASES;\""

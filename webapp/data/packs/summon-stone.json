@@ -1,0 +1,9 @@
+{
+  "slug": "summon-stone",
+  "name": "Summoning Stone",
+  "level_cap": 80,
+  "min_level": 1,
+  "consumables": [
+    { "item_id": 90100, "count": 1, "note": "Summoning Stone" }
+  ]
+}

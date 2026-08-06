@@ -94,6 +94,21 @@ tasks:
     cmds:
       - docker compose restart {{.CLI_ARGS}}
 
+  stop:
+    desc: "Stop services gracefully, e.g. task stop -- ac-pb-realm-2"
+    cmds:
+      - docker compose stop {{.CLI_ARGS}}
+
+  restart-db:
+    desc: Restart the database server
+    cmds:
+      - docker compose restart ac-database
+
+  restart-auth:
+    desc: Restart the auth server
+    cmds:
+      - docker compose restart ac-authserver
+
   ps:
     desc: Show container status
     cmds:
