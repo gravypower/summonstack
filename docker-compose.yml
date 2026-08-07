@@ -1,7 +1,7 @@
 # SummonStack — AzerothCore (WotLK 3.3.5a) + web portal, all in Docker Compose.
 #
 # Quickstart:
-#   1. copy .env.example to .env and edit the secrets
+#   1. copy .env.sample to .env and edit the secrets
 #   2. docker compose up -d
 #   3. see README.md for creating the first admin account
 #
@@ -87,9 +87,10 @@ services:
   # recompiles on every request, ships unminified bundles and serves the dev
   # error overlay — stack traces and all — to whoever hits a 500.
   #
-  # For hot reload while working on the portal, add the dev overlay:
-  #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
-  # or `task dev`, which does the same and keeps the generated realm override.
+  # Hot reload lives in docker-compose.dev.yml, selected by WEBAPP_MODE in
+  # .env — `task dev` to switch, `task mode` to see which is active. Setting it
+  # there rather than passing -f to one command is what keeps every other task
+  # acting on the same mode.
   ac-webapp:
     container_name: ac-webapp
     build:

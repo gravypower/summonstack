@@ -320,7 +320,7 @@ byte-compile of `scripts/` — see `.github/workflows/ci.yml`.
 ## First-time setup
 
 **1. Configure secrets.** A `.env` was generated with random values — review
-it (or copy `.env.example` to `.env` and fill it in yourself).
+it (or copy `.env.sample` to `.env` and fill it in yourself).
 
 **2. Start the stack:**
 

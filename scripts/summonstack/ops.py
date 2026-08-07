@@ -39,8 +39,8 @@ def setup_env() -> int:
         print(".env already exists.")
         return 0
 
-    if os.path.exists(".env.example"):
-        shutil.copy(".env.example", ".env")
+    if os.path.exists(".env.sample"):
+        shutil.copy(".env.sample", ".env")
     else:
         with open(".env", "w", encoding="utf-8") as f:
             f.write("DOCKER_DB_ROOT_PASSWORD=password\nSESSION_SECRET=\n")
