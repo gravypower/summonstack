@@ -5,7 +5,10 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "pretest": "tsc -p tsconfig.test.json",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "mysql2": "^3.11.0",
@@ -17,6 +20,8 @@
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "fengari": "^0.1.5",
+    "luaparse": "^0.3.1",
     "typescript": "^5.6.0"
   }
 }

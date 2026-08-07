@@ -294,6 +294,29 @@ Destructive admin actions (bans, GM levels, password resets) live in a separate
 `Danger Zone` folder so a stray full-collection run cannot fire them. See
 [bruno/README.md](bruno/README.md).
 
+## Tests
+
+The portal has a unit suite, run with Node's built-in test runner:
+
+```bash
+cd webapp && npm test          # compiles src/lib, then runs test/
+cd webapp && npm run typecheck
+```
+
+It needs no database and no running stack. The database is stubbed, which is
+the point: the things worth pinning down here are the ones a live server would
+happily get wrong without complaining — which realm a delivery command is
+addressed to, which character database a write lands in, which realm's
+settings priced a payout, and whether a refused summon really records nothing.
+
+The suite also covers `worldserver/lua_scripts/`. Those scripts are parsed as
+Lua 5.1 and their hooks are driven under a Lua VM with the Eluna API stubbed
+(`webapp/test/helpers/`), because a mistake there otherwise surfaces only when
+a realm starts.
+
+CI runs the same commands, plus `next build`, `docker compose config` and a
+byte-compile of `scripts/` — see `.github/workflows/ci.yml`.
+
 ## First-time setup
 
 **1. Configure secrets.** A `.env` was generated with random values — review

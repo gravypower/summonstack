@@ -3,8 +3,8 @@ import { getBalance, listCharacters, listXpLocks } from "@/lib/shop";
 import {
   awardPendingSummons,
   getAccountSummonSummary,
-  getSummonRewards,
   listSummonBonuses,
+  listSummonRewards,
 } from "@/lib/summons";
 
 export async function GET(): Promise<Response> {
@@ -13,13 +13,13 @@ export async function GET(): Promise<Response> {
     // Summon points are credited by a sweep rather than by the game server, so
     // settle the backlog before reading the balance the player is about to see.
     await awardPendingSummons();
-    const [balance, characters, xpLocks, summons, rewards, bonuses] =
+    const [balance, characters, xpLocks, summons, rewardsByRealm, bonuses] =
       await Promise.all([
         getBalance(session.accountId),
         listCharacters(session.accountId),
         listXpLocks(session.accountId),
         getAccountSummonSummary(session.accountId),
-        getSummonRewards(),
+        listSummonRewards(),
         listSummonBonuses(),
       ]);
     return Response.json({
@@ -27,10 +27,16 @@ export async function GET(): Promise<Response> {
       summons: {
         count: summons.summons,
         pointsEarned: summons.points,
-        enabled: rewards.enabled,
-        pointsPerSummon: rewards.pointsPerSummon,
-        dailyPointCap: rewards.dailyPointCap,
-        pairCooldownMinutes: rewards.pairCooldownMinutes,
+        // One entry per realm: what a summon pays differs between them, so
+        // there is no single rate to quote.
+        rewardsByRealm: rewardsByRealm.map((r) => ({
+          realmId: r.realmId,
+          realmName: r.realmName,
+          enabled: r.enabled,
+          pointsPerSummon: r.pointsPerSummon,
+          dailyPointCap: r.dailyPointCap,
+          pairCooldownMinutes: r.pairCooldownMinutes,
+        })),
         // Who is worth extra to summon. Character names only — players need to
         // know who to look for, not whose account it is.
         bounties: bonuses
@@ -46,10 +52,14 @@ export async function GET(): Promise<Response> {
         race: c.race,
         class: c.class,
         level: c.level,
+        // Guids restart at 1 in every character database, so the realm is what
+        // makes a character identifiable — the shop sends it back on purchase.
+        realmId: c.realm_id,
+        realmName: c.realm_name,
         // The shop UI uses this to warn profession-boost buyers to log out.
         online: c.online !== 0,
         // Level this character's XP is held at, or null if it still levels.
-        xpLockedAt: xpLocks[c.guid] ?? null,
+        xpLockedAt: xpLocks[`${c.realm_id}:${c.guid}`] ?? null,
       })),
     });
   } catch (err) {

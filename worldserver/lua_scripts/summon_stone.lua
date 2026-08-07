@@ -71,12 +71,69 @@ local pending = {}
 -- playerGuid → GetGameTime() when the cooldown expires.
 local activeSpawns = {}
 
+-- Spawned warlock's creature guid → { owner = playerGuid, expires = time }.
+--
+-- The gossip hooks below are registered per creature *entry*, so without this
+-- every summoner warlock answered to every player: one stone bought a whole
+-- raid 180 seconds of free cross-map summons, each one recording a summon
+-- that earned its caster points.
+--
+-- Creature guids are reused after a despawn, hence the expiry. A `.reload ale`
+-- empties this table and orphans any warlock already standing, which is why
+-- the refusal below tells the player to use their own stone rather than
+-- claiming the NPC is broken; they despawn within SPAWN_SECONDS anyway.
+local spawnOwners = {}
+
+local function claimSpawn(creature, playerGuid, now)
+  if not creature then
+    return
+  end
+  spawnOwners[creature:GetGUIDLow()] = {
+    owner = playerGuid,
+    expires = now + SPAWN_SECONDS + 30,
+  }
+end
+
+--- Is this player the one who called this warlock?
+local function ownsSpawn(creature, player)
+  local claim = spawnOwners[creature:GetGUIDLow()]
+  return claim ~= nil and claim.owner == player:GetGUIDLow()
+end
+
+--- Drop claims for warlocks that have despawned, so guids can be reused.
+local function pruneSpawns()
+  local now = GetGameTime()
+  for creatureGuid, claim in pairs(spawnOwners) do
+    if now >= claim.expires then
+      spawnOwners[creatureGuid] = nil
+    end
+  end
+  for playerGuid, expires in pairs(activeSpawns) do
+    if now >= expires then
+      activeSpawns[playerGuid] = nil
+    end
+  end
+end
+
 -- Lazy table-existence check, same pattern as summons.lua.
 local tablesReady = {}
 
 -- ── Template injection ─────────────────────────────────────────────────────
 -- Run once per script load. REPLACE keeps a `.reload ale` safe: the rows are
 -- overwritten in place and no duplicate-key errors.
+--
+-- These write the database, but the worldserver reads item and creature
+-- templates into memory at startup and does not notice a row appearing
+-- underneath it. So on a realm that has never had this script loaded before,
+-- the item and the two NPCs exist in MySQL but not in the running world:
+-- `.send items <name> 90100` fails and SpawnCreature finds no template. Run
+--
+--     .reload item_template
+--     .reload creature_template
+--
+-- once from the admin console (or restart the worldserver) after the first
+-- load. Later loads change nothing, so the reload is only needed that once —
+-- and only if the entry ids or column values above are edited.
 
 WorldDBExecute(string.format(
   "REPLACE INTO item_template" ..
@@ -129,6 +186,40 @@ local function multiplierLabel(pct)
   return string.format("%.1fx", pct / 100)
 end
 
+-- ── Playerbots ─────────────────────────────────────────────────────────────
+--
+-- Duplicated from summons.lua, which explains the reasoning in full: random
+-- bots summon each other constantly, so their summons are recorded for the
+-- audit trail but never paid. Each script in this directory is self-contained
+-- (ALE loads them independently), so the alternative to duplicating is a
+-- shared file the engine is not guaranteed to resolve.
+--
+-- Without this the stone was a way around the rule: a stone summon of a bot
+-- was written as 'pending' and the portal paid it, while the realm counter
+-- below still filtered out a 'playerbot' skip_reason this file never wrote.
+local BOT_ACCOUNT_PREFIX = "rndbot"
+
+-- account id → true/false. Accounts are never renamed in practice and the
+-- alternative is an auth query per summon.
+local botAccounts = {}
+
+local function isBotAccount(accountId)
+  if accountId == nil or accountId == 0 then
+    return false
+  end
+  local known = botAccounts[accountId]
+  if known ~= nil then
+    return known
+  end
+  local query = AuthDBQuery(string.format(
+    "SELECT username FROM account WHERE id = %u", accountId))
+  local username = query and query:GetString(0) or nil
+  local isBot = username ~= nil
+    and username:lower():sub(1, #BOT_ACCOUNT_PREFIX) == BOT_ACCOUNT_PREFIX
+  botAccounts[accountId] = isBot
+  return isBot
+end
+
 -- ── Settings ───────────────────────────────────────────────────────────────
 
 local function refresh()
@@ -136,9 +227,10 @@ local function refresh()
     return
   end
 
+  -- This realm's own settings row; see the note in summons.lua.
   local query = WorldDBQuery(string.format(
     "SELECT enabled, points_per_summon, announce_every FROM `%s`.summon_rewards " ..
-    "WHERE id = 1", WEB_DB))
+    "WHERE id = %u", WEB_DB, REALM_ID))
   if query then
     state.enabled       = query:GetUInt32(0) == 1
     state.points        = query:GetUInt32(1)
@@ -176,8 +268,15 @@ local function record(offer, targetGuid, targetName, summoner, targetAccount)
     return
   end
 
-  local awardState  = state.enabled and "pending" or "skipped"
-  local skipReason  = state.enabled and "NULL" or "'rewards_off'"
+  -- A summon involving a random bot on either side is logged but never paid.
+  local bot = isBotAccount(offer.summonerAccount) or isBotAccount(targetAccount)
+  local awardState = (state.enabled and not bot) and "pending" or "skipped"
+  local skipReason = "NULL"
+  if bot then
+    skipReason = "'playerbot'"
+  elseif not state.enabled then
+    skipReason = "'rewards_off'"
+  end
 
   -- target_account comes from the characters row for consistency.
   CharDBExecute(string.format(
@@ -194,6 +293,12 @@ local function record(offer, targetGuid, targetName, summoner, targetAccount)
     awardState,
     skipReason,
     targetGuid))
+
+  -- Bot summons are recorded but do not move the counter and are not
+  -- announced, for the reasons given in summons.lua.
+  if bot then
+    return
+  end
 
   state.total = state.total + 1
 
@@ -267,8 +372,9 @@ local function OnItemUse(event, player, item, target)
   local warlockX = x + 2 * math.cos(o)
   local warlockY = y + 2 * math.sin(o)
   local warlockO = o + math.pi  -- face the player
-  player:SpawnCreature(NPC_WARLOCK, warlockX, warlockY, z, warlockO,
+  local warlock = player:SpawnCreature(NPC_WARLOCK, warlockX, warlockY, z, warlockO,
     5, SPAWN_SECONDS * 1000) -- 5 = TEMPSUMMON_TIMED_DESPAWN
+  claimSpawn(warlock, playerGuid, now)
 
   -- Spawn the assistant to the warlock's right.
   local assistO = o + 0.8
@@ -290,11 +396,30 @@ local function OnItemUse(event, player, item, target)
     "|cff00ff00A Summoner Warlock appears!|r Talk to the warlock to summon a player.")
 
   activeSpawns[playerGuid] = now + COOLDOWN_SECONDS
+
+  -- The charge is already consumed and the NPCs are up, so suppress the item's
+  -- own on-use spell rather than letting it cast on top of all that.
+  return false
 end
 
 -- ── Gossip handlers ────────────────────────────────────────────────────────
 
+--- Refuse anyone but the player whose stone called this warlock.
+local function rejectStranger(player, creature)
+  if ownsSpawn(creature, player) then
+    return false
+  end
+  player:SendBroadcastMessage(
+    "|cffff0000This summoner was called by someone else.|r " ..
+    "Use your own Summoning Stone.")
+  return true
+end
+
 local function OnGossipHello(event, player, creature)
+  if rejectStranger(player, creature) then
+    player:GossipComplete()
+    return
+  end
   player:GossipClearMenu()
   player:GossipMenuAddItem(0, "Summon a player", 0, 1, true,
     "Enter the name of the player to summon:")
@@ -304,6 +429,12 @@ end
 
 local function OnGossipSelect(event, player, creature, sender, intid, code)
   player:GossipComplete()
+
+  -- Checked here as well as in OnGossipHello: the menu is opened once but
+  -- selections arrive as separate packets, so this is the one that decides.
+  if rejectStranger(player, creature) then
+    return
+  end
 
   if intid == 2 then
     return
@@ -379,3 +510,4 @@ RegisterCreatureGossipEvent(NPC_WARLOCK, GOSSIP_EVENT_ON_SELECT, OnGossipSelect)
 refresh()
 CreateLuaEvent(refresh, POLL_SECONDS * 1000, 0)
 CreateLuaEvent(checkArrivals, CHECK_SECONDS * 1000, 0)
+CreateLuaEvent(pruneSpawns, SPAWN_SECONDS * 1000, 0)

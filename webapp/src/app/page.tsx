@@ -4,10 +4,16 @@ import { getSession } from "@/lib/session";
 import {
   awardPendingSummons,
   formatMultiplier,
-  getSummonRewards,
   getSummonStats,
   listSummonBonuses,
+  listSummonRewards,
 } from "@/lib/summons";
+import {
+  describeRate,
+  groupPayingRates,
+  isUniformRate,
+  joinNames,
+} from "@/lib/summon-rate";
 import CopyButton from "./copy-button";
 
 export const dynamic = "force-dynamic";
@@ -38,7 +44,12 @@ export default async function HomePage() {
   // Nothing schedules the summon payout, so portal traffic is what settles it.
   await awardPendingSummons().catch(() => {});
   const summons = await getSummonStats(5).catch(() => null);
-  const summonRewards = await getSummonRewards().catch(() => null);
+  // Per realm: what a summon pays differs between them, so there is no single
+  // rate to quote.
+  const summonRates = await listSummonRewards().catch(() => []);
+  const rateGroups = groupPayingRates(summonRates);
+  const uniformRate = isUniformRate(rateGroups, summonRates.length);
+  const anyRewardsEnabled = summonRates.some((r) => r.enabled);
   // Bounties worth showing: a multiplier above normal on someone who actually
   // has characters to summon.
   const bounties = (await listSummonBonuses().catch(() => [])).filter(
@@ -132,7 +143,7 @@ export default async function HomePage() {
         )}
       </div>
 
-      {summons && summonRewards && (
+      {summons && summonRates.length > 0 && (
         <div className="card">
           <h2>Summons</h2>
           <p className="muted">
@@ -140,20 +151,27 @@ export default async function HomePage() {
               ? "Nobody has been summoned here yet — a warlock ritual or a meeting stone starts the count."
               : `${summons.total} summon${summons.total === 1 ? "" : "s"} on the realm, ` +
                 `${summons.last24h} in the last day.`}
-            {summonRewards.enabled && summonRewards.pointsPerSummon > 0 && (
+            {rateGroups.length > 0 && (
               <>
                 {" "}
                 Summoning another player earns you{" "}
-                <strong>{summonRewards.pointsPerSummon} shop points</strong>
-                {summonRewards.dailyPointCap > 0
-                  ? ` (up to ${summonRewards.dailyPointCap} a day)`
-                  : ""}
+                {uniformRate ? (
+                  <strong>{describeRate(rateGroups[0])}</strong>
+                ) : (
+                  rateGroups.map((group, i) => (
+                    <span key={group.realmNames.join()}>
+                      {i > 0 ? "; " : ""}
+                      <strong>{describeRate(group)}</strong> on{" "}
+                      {joinNames(group.realmNames)}
+                    </span>
+                  ))
+                )}
                 , spendable in the <Link href="/shop">shop</Link>.
               </>
             )}
           </p>
 
-          {summonRewards.enabled && bounties.length > 0 && (
+          {anyRewardsEnabled && bounties.length > 0 && (
             <p>
               <strong>Worth extra right now:</strong>{" "}
               {bounties.map((b, i) => (
@@ -180,7 +198,7 @@ export default async function HomePage() {
                 </thead>
                 <tbody>
                   {summons.top.map((leader) => (
-                    <tr key={leader.guid}>
+                    <tr key={`${leader.realmId}-${leader.guid}`}>
                       <td className="mono">{leader.name}</td>
                       <td>{leader.summons}</td>
                       <td>

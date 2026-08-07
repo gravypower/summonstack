@@ -1,28 +1,15 @@
 import { errorResponse, HttpError, requireSession } from "@/lib/auth";
+import { RateLimiter } from "@/lib/rate-limit";
 import { purchase } from "@/lib/shop";
 
 // Purchases are atomic and idempotent, so bursts are safe — this limit just
 // keeps a scripted client from generating ledger noise and mail spam.
-const RATE_LIMIT = 5;
-const RATE_WINDOW_MS = 60_000;
-const recent = new Map<number, number[]>();
-
-function checkRateLimit(accountId: number): void {
-  const now = Date.now();
-  const hits = (recent.get(accountId) ?? []).filter(
-    (t) => now - t < RATE_WINDOW_MS
-  );
-  if (hits.length >= RATE_LIMIT) {
-    throw new HttpError(429, "Too many purchases at once — wait a minute.");
-  }
-  hits.push(now);
-  recent.set(accountId, hits);
-}
+const purchaseLimit = new RateLimiter(5, 60_000);
 
 export async function POST(req: Request): Promise<Response> {
   try {
     const session = await requireSession();
-    checkRateLimit(session.accountId);
+    purchaseLimit.check(session.accountId);
 
     const body = await req.json().catch(() => ({}));
     const idempotencyKey = String(body.idempotencyKey ?? "");

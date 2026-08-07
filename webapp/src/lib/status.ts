@@ -1,6 +1,6 @@
 import net from "node:net";
 import type { RowDataPacket } from "mysql2";
-import { AUTH_DB, CHARS_DB, getPool } from "./db";
+import { AUTH_DB, getPool } from "./db";
 import { listRealmsWithConfig } from "./realm";
 
 export interface RealmStatusDetail {

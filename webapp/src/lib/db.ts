@@ -2,8 +2,15 @@ import mysql from "mysql2/promise";
 import type { RowDataPacket } from "mysql2";
 
 export const AUTH_DB = process.env.AUTH_DB || "acore_auth";
-export const CHARS_DB = process.env.CHARS_DB || "acore_characters";
 export const WEB_DB = process.env.WEB_DB || "summonstack_web";
+
+// There is deliberately no CHARS_DB export. The character database differs per
+// realm (acore_characters_1, acore_characters_pb_2 …), so a single constant
+// named no realm at all once realms.yml took over — reads returned nothing and
+// writes landed on an unrelated character, both silently. Get the database
+// from getRealmConfig()/getRealmConfigById() in lib/realm.ts instead, which
+// resolves it per realm from the manifest. (The same reasoning is written out
+// at the top of worldserver/lua_scripts/summons.lua, which hit this first.)
 
 declare global {
   // eslint-disable-next-line no-var
@@ -188,7 +195,9 @@ const SUMMON_DDL = [
      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
      PRIMARY KEY (account_id)
    ) ENGINE=InnoDB`,
-  // Single row, read by the Lua script every 15s. updated_at is written
+  // One row per realm, keyed by realm id, read by that realm's Lua script
+  // every 15s — so a playerbots realm can pay differently, or not at all,
+  // without touching the main realm's economy. updated_at is written
   // explicitly rather than ON UPDATE, so the script's seen_at heartbeat does
   // not look like an admin edit.
   `CREATE TABLE IF NOT EXISTS \`__WEB_DB__\`.summon_rewards (
@@ -204,6 +213,26 @@ const SUMMON_DDL = [
      PRIMARY KEY (id)
    ) ENGINE=InnoDB`,
 ];
+
+/**
+ * MySQL has no ADD COLUMN IF NOT EXISTS, so re-running a migration on an
+ * install that already has the column is normal and must not fail.
+ *
+ * Only ER_DUP_FIELDNAME is swallowed. These blocks used to be `catch {}`,
+ * which made a permission error, a lock timeout or a typo look exactly like
+ * "already applied" — the app then carried on against a half-migrated schema
+ * and the realm-scoping bugs this column exists to fix came back silently.
+ */
+async function addColumnIfMissing(
+  pool: mysql.Pool,
+  sql: string
+): Promise<void> {
+  try {
+    await pool.query(sql);
+  } catch (err) {
+    if ((err as { code?: string }).code !== "ER_DUP_FIELDNAME") throw err;
+  }
+}
 
 /** Create the webapp's own database/tables on first use. */
 export async function ensureWebDb(): Promise<void> {
@@ -234,12 +263,18 @@ export async function ensureWebDb(): Promise<void> {
         // (the table and its foreign key target).
         await pool.query(ddl.replaceAll("__WEB_DB__", WEB_DB));
       }
+      // Seeds the two realms a stock install has. Realms added later get
+      // their row from the first admin save (saveSummonRewards upserts). Until
+      // then getSummonRewards() returns the built-in DEFAULTS for them — which
+      // do pay, at 5 points a summon — rather than inheriting realm 1's row.
       await pool.query(
         `INSERT IGNORE INTO \`${WEB_DB}\`.summon_rewards (id) VALUES (1), (2)`
       );
-      // Single row per realm, read by worldserver/lua_scripts/xp.lua.
-      // updated_at is written explicitly rather than ON UPDATE: the Lua script
-      // touches seen_at every few seconds and must not look like an edit.
+      // One row per realm, keyed by realm id, read by that realm's copy of
+      // worldserver/lua_scripts/xp.lua — so one realm can run an event while
+      // another does not. updated_at is written explicitly rather than ON
+      // UPDATE: the Lua script touches seen_at every few seconds and must not
+      // look like an edit.
       await pool.query(
         `CREATE TABLE IF NOT EXISTS \`${WEB_DB}\`.xp_event (
            id TINYINT UNSIGNED NOT NULL DEFAULT 1,
@@ -254,45 +289,49 @@ export async function ensureWebDb(): Promise<void> {
            PRIMARY KEY (id)
          ) ENGINE=InnoDB`
       );
+      // Same as summon_rewards above: later realms get their row on first
+      // save, and until then their event simply reads as off.
       await pool.query(
         `INSERT IGNORE INTO \`${WEB_DB}\`.xp_event (id) VALUES (1), (2)`
       );
-      // Migrations for multi-realm support
-      try {
-        await pool.query(
-          `ALTER TABLE \`${WEB_DB}\`.shop_xp_locks ADD COLUMN realm_id INT UNSIGNED NOT NULL DEFAULT 1 AFTER account_id`
-        );
-      } catch {}
-      try {
-        await pool.query(
-          `ALTER TABLE \`${WEB_DB}\`.shop_transactions ADD COLUMN realm_id INT UNSIGNED NOT NULL DEFAULT 1 AFTER account_id`
-        );
-      } catch {}
-      try {
-        await pool.query(
-          `ALTER TABLE \`${WEB_DB}\`.summon_events ADD COLUMN realm_id INT UNSIGNED NOT NULL DEFAULT 1 AFTER id`
-        );
-      } catch {}
+      // Migrations for multi-realm support. Each adds a column that newer
+      // installs already have from the CREATE above, so "duplicate column" is
+      // the expected outcome and the only one worth swallowing — see
+      // addColumnIfMissing.
+      await addColumnIfMissing(
+        pool,
+        `ALTER TABLE \`${WEB_DB}\`.shop_xp_locks ADD COLUMN realm_id INT UNSIGNED NOT NULL DEFAULT 1 AFTER account_id`
+      );
+      await addColumnIfMissing(
+        pool,
+        `ALTER TABLE \`${WEB_DB}\`.shop_transactions ADD COLUMN realm_id INT UNSIGNED NOT NULL DEFAULT 1 AFTER account_id`
+      );
+      await addColumnIfMissing(
+        pool,
+        `ALTER TABLE \`${WEB_DB}\`.summon_events ADD COLUMN realm_id INT UNSIGNED NOT NULL DEFAULT 1 AFTER id`
+      );
       // Widen the lock key to include the realm. Must run after the realm_id
       // column exists above. While the key was character_guid alone, a second
       // realm's character with the same guid collided with the first realm's
       // row instead of getting one of its own — so a lock bought on one realm
       // silently overwrote an unrelated character's lock on another.
-      try {
-        const [pk] = await pool.query<RowDataPacket[]>(
-          `SELECT COUNT(*) AS n FROM information_schema.STATISTICS
-            WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'shop_xp_locks'
-              AND INDEX_NAME = 'PRIMARY'`,
-          [WEB_DB]
+      //
+      // Guarded by inspecting the current key rather than by catching: getting
+      // this wrong reintroduces that bug silently, so a failure here has to
+      // reach the caller.
+      const [pk] = await pool.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS n FROM information_schema.STATISTICS
+          WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'shop_xp_locks'
+            AND INDEX_NAME = 'PRIMARY'`,
+        [WEB_DB]
+      );
+      // One column in the primary key means it is still the old guid-only key.
+      if (Number(pk[0]?.n ?? 0) === 1) {
+        await pool.query(
+          `ALTER TABLE \`${WEB_DB}\`.shop_xp_locks
+             DROP PRIMARY KEY, ADD PRIMARY KEY (realm_id, character_guid)`
         );
-        // One column in the primary key means it is still the old guid-only key.
-        if (Number(pk[0]?.n ?? 0) === 1) {
-          await pool.query(
-            `ALTER TABLE \`${WEB_DB}\`.shop_xp_locks
-               DROP PRIMARY KEY, ADD PRIMARY KEY (realm_id, character_guid)`
-          );
-        }
-      } catch {}
+      }
     })().catch((err) => {
       global.__ssWebDbReady = undefined;
       throw err;

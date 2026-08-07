@@ -149,9 +149,13 @@ local function refresh()
     return
   end
 
+  -- Keyed by realm: each realm has its own settings row, so a playerbots
+  -- realm can pay differently (or not at all) without touching the main
+  -- realm's economy. Reading id = 1 unconditionally meant every realm
+  -- mirrored realm 1 and no other realm's row could ever take effect.
   local query = WorldDBQuery(string.format(
     "SELECT enabled, points_per_summon, announce_every FROM `%s`.summon_rewards " ..
-    "WHERE id = 1", WEB_DB))
+    "WHERE id = %u", WEB_DB, REALM_ID))
   if query then
     state.enabled = query:GetUInt32(0) == 1
     state.points = query:GetUInt32(1)
@@ -187,7 +191,8 @@ local function refresh()
   -- Heartbeat, so the admin panel can tell "nobody has summoned anyone" apart
   -- from "this script never loaded".
   WorldDBExecute(string.format(
-    "UPDATE `%s`.summon_rewards SET seen_at = NOW() WHERE id = 1", WEB_DB))
+    "UPDATE `%s`.summon_rewards SET seen_at = NOW() WHERE id = %u",
+    WEB_DB, REALM_ID))
 end
 
 -- ── Counting ───────────────────────────────────────────────────────────────

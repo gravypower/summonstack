@@ -1,0 +1,26 @@
+// Compiles src/lib to CommonJS in .test-build/ so `node --test` can require
+// it. The tests exercise the real modules — nothing is reimplemented — but
+// Node cannot load .ts directly here, and the app's own tsconfig is noEmit
+// with bundler resolution because Next does the compiling in every other
+// context.
+//
+// Only src/lib is built: it holds the logic worth testing, and it has no JSX
+// or next/* imports beyond lib/session.ts, which pulls next/headers (safe to
+// require — it only throws when called outside a request).
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["esnext"],
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "types": ["node"],
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": false,
+    "declaration": false,
+    "outDir": ".test-build",
+    "rootDir": "src/lib"
+  },
+  "include": ["src/lib/**/*.ts"]
+}

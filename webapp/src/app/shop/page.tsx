@@ -2,6 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  describeRate,
+  groupPayingRates,
+  isUniformRate,
+  joinNames,
+  type RealmRate,
+} from "@/lib/summon-rate";
 
 interface Character {
   guid: number;
@@ -10,10 +17,19 @@ interface Character {
   class: number;
   level: number;
   online: boolean;
-  realm_id?: number;
-  realm_name?: string;
+  realmId: number;
+  realmName: string;
   /** Level this character's XP is held at, or null if it still levels. */
   xpLockedAt: number | null;
+}
+
+/**
+ * What identifies a character in this form. Guids restart at 1 in every
+ * character database, so the guid alone picked whichever realm's character
+ * the server happened to find first.
+ */
+function charKey(c: Character): string {
+  return `${c.realmId}:${c.guid}`;
 }
 
 interface Product {
@@ -35,10 +51,8 @@ interface Product {
 interface SummonSummary {
   count: number;
   pointsEarned: number;
-  enabled: boolean;
-  pointsPerSummon: number;
-  dailyPointCap: number;
-  pairCooldownMinutes: number;
+  /** What a summon pays, per realm — the rate differs between them. */
+  rewardsByRealm: RealmRate[];
   /** Players who currently pay more than the base rate to summon. */
   bounties: { multiplierPct: number; characters: string[] }[];
 }
@@ -102,7 +116,8 @@ export default function ShopPage() {
 
   // Purchase panel state (one panel open at a time).
   const [active, setActive] = useState<string | null>(null);
-  const [charGuid, setCharGuid] = useState<number>(0);
+  // "<realmId>:<guid>", not a bare guid — see charKey().
+  const [selectedChar, setSelectedChar] = useState<string>("");
   const [spec, setSpec] = useState<string>("");
   const [idemKey, setIdemKey] = useState<string>("");
   const [busy, setBusy] = useState(false);
@@ -133,7 +148,7 @@ export default function ShopPage() {
 
   function openPanel(slug: string) {
     setActive(slug);
-    setCharGuid(0);
+    setSelectedChar("");
     setSpec("");
     setMsg(null);
     // Minted when the panel opens: double-clicking Buy replays the same
@@ -141,8 +156,21 @@ export default function ShopPage() {
     setIdemKey(newIdempotencyKey());
   }
 
+  // What a summon pays, per realm. Collapsed so realms paying the same rate
+  // are quoted once, and named when they differ.
+  const summonRates = summons?.rewardsByRealm ?? [];
+  const summonRateGroups = groupPayingRates(summonRates);
+  const uniformSummonRate = isUniformRate(summonRateGroups, summonRates.length);
+  // The cooldown is quoted as one number; the longest is the safe one to
+  // promise, since a shorter one elsewhere only ever pays sooner.
+  const longestPairCooldown = summonRates.reduce(
+    (max, r) => (r.enabled ? Math.max(max, r.pairCooldownMinutes) : max),
+    0
+  );
+
   const product = products.find((p) => p.slug === active) ?? null;
-  const character = characters.find((c) => c.guid === charGuid) ?? null;
+  const character =
+    characters.find((c) => charKey(c) === selectedChar) ?? null;
   const specOptions =
     product?.specsByClass && character
       ? product.specsByClass[character.class] ?? []
@@ -185,6 +213,9 @@ export default function ShopPage() {
       body: JSON.stringify({
         productSlug: product.slug,
         characterGuid: character.guid,
+        // Without this the server falls back to scanning realms by guid and
+        // can resolve a different realm's character of the same guid.
+        realmId: character.realmId,
         spec: needsSpec ? spec : null,
         idempotencyKey: idemKey,
       }),
@@ -239,18 +270,22 @@ export default function ShopPage() {
         </div>
       </div>
 
-      {summons && summons.enabled && summons.pointsPerSummon > 0 && (
+      {summons && summonRateGroups.length > 0 && (
         <p className="muted">
           You have summoned {summons.count} player
           {summons.count === 1 ? "" : "s"} and earned {summons.pointsEarned}{" "}
-          points that way. Every player you summon — warlock ritual or meeting
-          stone — is worth {summons.pointsPerSummon} points
-          {summons.dailyPointCap > 0
-            ? `, up to ${summons.dailyPointCap} a day`
-            : ""}
+          points that way. Every player you summon — warlock ritual, meeting
+          stone or summoning stone — is worth{" "}
+          {uniformSummonRate
+            ? describeRate(summonRateGroups[0])
+            : summonRateGroups
+                .map(
+                  (g) => `${describeRate(g)} on ${joinNames(g.realmNames)}`
+                )
+                .join("; ")}
           . Summoning your own alts pays nothing
-          {summons.pairCooldownMinutes > 0
-            ? `, and the same person only pays again after ${summons.pairCooldownMinutes} minutes`
+          {longestPairCooldown > 0
+            ? `, and the same person only pays again after ${longestPairCooldown} minutes`
             : ""}
           .
           {(summons.bounties ?? []).length > 0 && (
@@ -291,25 +326,25 @@ export default function ShopPage() {
                   <span>Character</span>
                   <select
                     className="input"
-                    value={charGuid}
+                    value={selectedChar}
                     onChange={(e) => {
-                      setCharGuid(Number(e.target.value));
+                      setSelectedChar(e.target.value);
                       setSpec("");
                     }}
                     required
                   >
-                    <option value={0} disabled>
+                    <option value="" disabled>
                       Pick a character…
                     </option>
                     {characters.map((c) => {
                       const reason = ineligible(p, c);
                       return (
                         <option
-                          key={c.guid}
-                          value={c.guid}
+                          key={charKey(c)}
+                          value={charKey(c)}
                           disabled={reason !== null}
                         >
-                          {c.realm_name ? `[${c.realm_name}] ` : ""}
+                          {c.realmName ? `[${c.realmName}] ` : ""}
                           {c.name} — {CLASS_NAMES[c.class] ?? "?"} {c.level}
                           {reason
                             ? ` (${reason})`

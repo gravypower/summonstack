@@ -47,22 +47,31 @@ export default function AdminEventPage() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  // Each realm has its own event row, so the page always edits one realm.
+  const [realms, setRealms] = useState<{ id: number; name: string }[]>([]);
+  const [realmId, setRealmId] = useState(1);
 
-  const load = useCallback(async (reseed: boolean) => {
-    const res = await fetch("/api/admin/event");
-    if (!res.ok) return;
-    const data = await res.json();
-    setEvent(data.event);
-    // Only overwrite the form on the first load and after a save, so the
-    // heartbeat poll cannot yank a field out from under the admin.
-    if (reseed) setDraft(draftFrom(data.event));
-  }, []);
+  const load = useCallback(
+    async (reseed: boolean, forRealm: number) => {
+      const res = await fetch(`/api/admin/event?realmId=${forRealm}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setEvent(data.event);
+      setRealms(data.realms ?? []);
+      // Only overwrite the form on the first load, after a save, and when the
+      // realm changes — so the heartbeat poll cannot yank a field out from
+      // under the admin.
+      if (reseed) setDraft(draftFrom(data.event));
+    },
+    []
+  );
 
   useEffect(() => {
-    load(true);
-    const timer = setInterval(() => load(false), 10000);
+    // Switching realms reseeds: the form is now showing a different row.
+    load(true, realmId);
+    const timer = setInterval(() => load(false, realmId), 10000);
     return () => clearInterval(timer);
-  }, [load]);
+  }, [load, realmId]);
 
   async function save(enabled: boolean) {
     if (!draft) return;
@@ -72,6 +81,7 @@ export default function AdminEventPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        realmId,
         name: draft.name,
         enabled,
         multiplier: Number(draft.multiplier),
@@ -110,6 +120,29 @@ export default function AdminEventPage() {
   return (
     <>
       {msg && <div className={`msg ${msg.ok ? "ok" : "error"}`}>{msg.text}</div>}
+
+      {realms.length > 1 && (
+        <div className="card" style={{ marginBottom: "1rem" }}>
+          <label>
+            Realm
+            <select
+              value={realmId}
+              onChange={(e) => setRealmId(Number(e.target.value))}
+            >
+              {realms.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="muted" style={{ marginBottom: 0, fontSize: "0.875rem" }}>
+            Each realm runs its own event. Saving here changes {
+              realms.find((r) => r.id === realmId)?.name ?? "this realm"
+            } only.
+          </p>
+        </div>
+      )}
 
       {!event.worldserverReading && (
         <div className="msg error">

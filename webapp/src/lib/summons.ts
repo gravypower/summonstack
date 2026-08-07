@@ -13,7 +13,8 @@
 //     if two sweeps run at once.
 import type { ResultSetHeader, RowDataPacket } from "mysql2";
 import { HttpError } from "./auth";
-import { AUTH_DB, CHARS_DB, WEB_DB, ensureWebDb, getPool } from "./db";
+import { AUTH_DB, WEB_DB, ensureWebDb, getPool } from "./db";
+import { listRealmsWithConfig } from "./realm";
 
 /** The Lua script polls every 15s, so a longer gap means it is not reading. */
 const HEARTBEAT_SECONDS = 60;
@@ -51,7 +52,19 @@ const DEFAULTS: SummonRewards = {
   worldserverReading: false,
 };
 
-export async function getSummonRewards(): Promise<SummonRewards> {
+/**
+ * One row per realm, keyed by realm id. Each realm's worldserver reads its own
+ * row, so a playerbots realm can pay differently (or not at all) without
+ * touching the main realm's economy.
+ *
+ * A realm that has never been saved has no row and falls back to DEFAULTS —
+ * which are enabled, at 5 points a summon. That is deliberate: a new realm
+ * pays the standard rate until an admin decides otherwise, and never silently
+ * inherits whatever realm 1 happens to be set to.
+ */
+export async function getSummonRewards(
+  realmId: number = 1
+): Promise<SummonRewards> {
   await ensureWebDb();
   // The heartbeat is evaluated by MySQL so it uses the same clock the Lua
   // script writes seen_at with.
@@ -60,8 +73,8 @@ export async function getSummonRewards(): Promise<SummonRewards> {
             announce_every, updated_by, updated_at, seen_at,
             (seen_at IS NOT NULL AND seen_at > NOW() - INTERVAL ? SECOND)
               AS seen_recently
-       FROM \`${WEB_DB}\`.summon_rewards WHERE id = 1`,
-    [HEARTBEAT_SECONDS]
+       FROM \`${WEB_DB}\`.summon_rewards WHERE id = ?`,
+    [HEARTBEAT_SECONDS, realmId]
   );
   const row = rows[0];
   if (!row) return DEFAULTS;
@@ -127,18 +140,31 @@ export function validateSummonRewards(
   return issues;
 }
 
+/**
+ * Upsert rather than update: only realms 1 and 2 are seeded, so a third realm
+ * would otherwise save into nothing and silently keep the defaults.
+ */
 export async function saveSummonRewards(
   update: SummonRewardsUpdate,
-  username: string
+  username: string,
+  realmId: number = 1
 ): Promise<SummonRewards> {
   await ensureWebDb();
   await getPool().query(
-    `UPDATE \`${WEB_DB}\`.summon_rewards
-        SET enabled = ?, points_per_summon = ?, daily_point_cap = ?,
-            pair_cooldown_minutes = ?, announce_every = ?,
-            updated_by = ?, updated_at = NOW()
-      WHERE id = 1`,
+    `INSERT INTO \`${WEB_DB}\`.summon_rewards
+       (id, enabled, points_per_summon, daily_point_cap,
+        pair_cooldown_minutes, announce_every, updated_by, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+     ON DUPLICATE KEY UPDATE
+       enabled = VALUES(enabled),
+       points_per_summon = VALUES(points_per_summon),
+       daily_point_cap = VALUES(daily_point_cap),
+       pair_cooldown_minutes = VALUES(pair_cooldown_minutes),
+       announce_every = VALUES(announce_every),
+       updated_by = VALUES(updated_by),
+       updated_at = NOW()`,
     [
+      realmId,
       update.enabled ? 1 : 0,
       update.pointsPerSummon,
       update.dailyPointCap,
@@ -147,7 +173,24 @@ export async function saveSummonRewards(
       username.slice(0, 32),
     ]
   );
-  return getSummonRewards();
+  return getSummonRewards(realmId);
+}
+
+export interface RealmSummonRewards extends SummonRewards {
+  realmId: number;
+  realmName: string;
+}
+
+/** What a summon pays on each realm, for the admin picker and public pages. */
+export async function listSummonRewards(): Promise<RealmSummonRewards[]> {
+  const realms = await listRealmsWithConfig();
+  return Promise.all(
+    realms.map(async (realm) => ({
+      realmId: realm.id,
+      realmName: realm.name,
+      ...(await getSummonRewards(realm.id)),
+    }))
+  );
 }
 
 // ── Bounties ───────────────────────────────────────────────────────────────
@@ -188,17 +231,31 @@ export async function listSummonBonuses(): Promise<SummonBonus[]> {
   );
   if (rows.length === 0) return [];
 
-  const [chars] = await pool.query<RowDataPacket[]>(
-    `SELECT account, name FROM \`${CHARS_DB}\`.characters
-      WHERE account IN (?) AND deleteInfos_Account IS NULL
-      ORDER BY level DESC, name`,
-    [rows.map((r) => Number(r.account_id))]
-  );
+  // A bounty is on the account, and an account's characters are spread across
+  // every realm — so the names players are told to look for have to come from
+  // all of them. Queried per realm rather than from one hardcoded database,
+  // which named no realm at all once realms.yml took over and left every
+  // bounty with an empty character list (and so hidden from the UI, which
+  // filters them out).
+  const accountIds = rows.map((r) => Number(r.account_id));
+  const realms = await listRealmsWithConfig();
   const byAccount = new Map<number, string[]>();
-  for (const c of chars) {
-    const list = byAccount.get(Number(c.account)) ?? [];
-    list.push(String(c.name));
-    byAccount.set(Number(c.account), list);
+  for (const realm of realms) {
+    try {
+      const [chars] = await pool.query<RowDataPacket[]>(
+        `SELECT account, name FROM \`${realm.charsDb}\`.characters
+          WHERE account IN (?) AND deleteInfos_Account IS NULL
+          ORDER BY level DESC, name`,
+        [accountIds]
+      );
+      for (const c of chars) {
+        const list = byAccount.get(Number(c.account)) ?? [];
+        list.push(String(c.name));
+        byAccount.set(Number(c.account), list);
+      }
+    } catch {
+      // A realm whose database is not imported yet contributes no names.
+    }
   }
 
   return rows.map((r) => ({
@@ -268,6 +325,7 @@ export async function clearSummonBonus(accountId: number): Promise<void> {
 
 interface PendingRow extends RowDataPacket {
   id: number;
+  realm_id: number;
   summoner_name: string;
   summoner_account: number;
   target_name: string;
@@ -289,8 +347,8 @@ export async function awardPendingSummons(): Promise<number> {
   await ensureWebDb();
   const pool = getPool();
   const [rows] = await pool.query<PendingRow[]>(
-    `SELECT id, summoner_name, summoner_account, target_name, target_account,
-            created_at
+    `SELECT id, realm_id, summoner_name, summoner_account, target_name,
+            target_account, created_at
        FROM \`${WEB_DB}\`.summon_events
       WHERE award_state = 'pending'
       ORDER BY id
@@ -298,12 +356,27 @@ export async function awardPendingSummons(): Promise<number> {
   );
   if (rows.length === 0) return 0;
 
-  // Read once: settling a backlog must not change the price halfway through.
-  const config = await getSummonRewards();
+  // Settings are per realm, so a backlog spanning realms is priced by each
+  // row's own realm. Each realm is read once: settling a backlog must not
+  // change the price halfway through.
+  const configs = new Map<number, SummonRewards>();
+  const configFor = async (realmId: number): Promise<SummonRewards> => {
+    const cached = configs.get(realmId);
+    if (cached) return cached;
+    const fresh = await getSummonRewards(realmId);
+    configs.set(realmId, fresh);
+    return fresh;
+  };
+
   const bonuses = await bonusMap();
   let paid = 0;
 
   for (const row of rows) {
+    // The rate comes from the summon's own realm; the cap and the pair
+    // cooldown below stay account-wide across realms on purpose, because
+    // shop_balances is one shared wallet — a per-realm cap would let the same
+    // account earn the daily maximum once on every realm.
+    const config = await configFor(Number(row.realm_id) || 1);
     // A bounty on the summoned account multiplies the payout; 0 makes
     // summoning that account worthless, which is the way to shut down a farm
     // without turning rewards off for everyone.
@@ -447,6 +520,8 @@ async function credit(
 // ── Reads ──────────────────────────────────────────────────────────────────
 
 export interface SummonLeader {
+  /** Guids restart at 1 in every character database, so one alone is ambiguous. */
+  realmId: number;
   guid: number;
   /** Current character name, falling back to the name at the last summon. */
   name: string;
@@ -473,30 +548,75 @@ export async function getSummonStats(limit = 5): Promise<SummonStats> {
             COALESCE(SUM(award_state = 'pending'), 0) AS pending
        FROM \`${WEB_DB}\`.summon_events`
   );
+  // Grouped by realm as well as guid: guids restart at 1 in every character
+  // database, so grouping on the guid alone merged two realms' summoners into
+  // one leaderboard row and credited both to whichever name won.
   const [top] = await pool.query<RowDataPacket[]>(
-    `SELECT e.summoner_guid AS guid,
-            COALESCE(c.name, MAX(e.summoner_name)) AS name,
+    `SELECT e.realm_id, e.summoner_guid AS guid,
+            MAX(e.summoner_name) AS name,
             COUNT(*) AS summons,
             COALESCE(SUM(e.awarded_points), 0) AS points
        FROM \`${WEB_DB}\`.summon_events e
-       LEFT JOIN \`${CHARS_DB}\`.characters c ON c.guid = e.summoner_guid
-      GROUP BY e.summoner_guid, c.name
+      GROUP BY e.realm_id, e.summoner_guid
       ORDER BY summons DESC, name
       LIMIT ${Math.max(1, Math.min(50, Math.trunc(limit)))}`
   );
+
+  const leaders: SummonLeader[] = top.map((t) => ({
+    realmId: Number(t.realm_id),
+    guid: Number(t.guid),
+    name: String(t.name),
+    summons: Number(t.summons),
+    points: Number(t.points),
+  }));
+  await resolveCurrentNames(leaders);
+
   const row = totals[0];
   return {
     total: Number(row?.total ?? 0),
     last24h: Number(row?.last24h ?? 0),
     pointsAwarded: Number(row?.points_awarded ?? 0),
     pending: Number(row?.pending ?? 0),
-    top: top.map((t) => ({
-      guid: Number(t.guid),
-      name: String(t.name),
-      summons: Number(t.summons),
-      points: Number(t.points),
-    })),
+    top: leaders,
   };
+}
+
+/**
+ * Replace each leader's frozen summon-time name with the character's current
+ * one, so a rename shows on the leaderboard. Mutates in place.
+ *
+ * Looked up per realm rather than against one hardcoded database: that
+ * database names no realm on a manifest-driven install, so every name fell
+ * back to the recorded one and a rename never appeared.
+ */
+async function resolveCurrentNames(leaders: SummonLeader[]): Promise<void> {
+  if (leaders.length === 0) return;
+  const byRealm = new Map<number, SummonLeader[]>();
+  for (const leader of leaders) {
+    const list = byRealm.get(leader.realmId) ?? [];
+    list.push(leader);
+    byRealm.set(leader.realmId, list);
+  }
+
+  const pool = getPool();
+  for (const realm of await listRealmsWithConfig()) {
+    const group = byRealm.get(realm.id);
+    if (!group) continue;
+    try {
+      const [chars] = await pool.query<RowDataPacket[]>(
+        `SELECT guid, name FROM \`${realm.charsDb}\`.characters WHERE guid IN (?)`,
+        [group.map((leader) => leader.guid)]
+      );
+      const names = new Map(
+        chars.map((c) => [Number(c.guid), String(c.name)])
+      );
+      for (const leader of group) {
+        leader.name = names.get(leader.guid) ?? leader.name;
+      }
+    } catch {
+      // A realm whose database is not imported yet keeps the recorded names.
+    }
+  }
 }
 
 /** The newest summons, for the admin page. */

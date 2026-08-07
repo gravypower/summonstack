@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# A newer push to the same branch makes the older run pointless.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  webapp:
+    name: webapp (typecheck, test, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: webapp
+    steps:
+      - uses: actions/checkout@v4
+
+      # Matches the node the Dockerfile builds and runs the portal on.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # No package-lock.json is committed, so `npm ci` would fail; cache the
+      # npm download directory instead of relying on a lockfile.
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Also covers the worldserver Lua scripts: they are parsed and their
+      # hooks are exercised under a Lua VM, since a syntax error there is
+      # otherwise only found when a realm starts.
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+
+  compose:
+    name: docker compose config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Catches a malformed compose file, and proves the stack still refuses to
+      # start without SESSION_SECRET.
+      - name: Rejects a missing SESSION_SECRET
+        run: |
+          if docker compose config -q 2>/dev/null; then
+            echo "compose accepted a missing SESSION_SECRET" >&2
+            exit 1
+          fi
+          echo "ok: compose refuses to start without SESSION_SECRET"
+
+      - name: Validates with one set
+        run: docker compose config -q
+        env:
+          SESSION_SECRET: a-secret-long-enough-for-ci
+
+  python:
+    name: scripts (compile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Byte-compile the task scripts
+        run: python -m compileall -q scripts/
