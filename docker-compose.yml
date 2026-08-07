@@ -19,7 +19,10 @@ services:
       - ac-network
     ports:
       # Bound to localhost only — for tools like Keira3/HeidiSQL on the host.
-      - ${DOCKER_DB_EXTERNAL_PORT:-3306}:3306
+      # The 127.0.0.1 prefix is what makes that true: without it Docker
+      # publishes on 0.0.0.0 and the database answers the whole network with
+      # root credentials. Connect remote tools over SSH or ZeroTier instead.
+      - 127.0.0.1:${DOCKER_DB_EXTERNAL_PORT:-3306}:3306
     environment:
       - MYSQL_ROOT_PASSWORD=${DOCKER_DB_ROOT_PASSWORD:-password}
     volumes:
@@ -99,7 +102,9 @@ services:
       SOAP_URL: http://ac-worldserver:7878
       SOAP_USER: ${SOAP_USER:-admin}
       SOAP_PASS: ${SOAP_PASS:-}
-      SESSION_SECRET: ${SESSION_SECRET:-please-change-me}
+      # No default: a guessable signing key lets anyone forge an admin session
+      # cookie. `:?` makes compose refuse to start until .env sets it.
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env to a long random string, e.g. openssl rand -base64 32}
       SITE_URL: ${SITE_URL:-http://${PUBLIC_HOST:-localhost}:${DOCKER_WEB_EXTERNAL_PORT:-8080}}
       DOWNLOAD_URL: ${DOWNLOAD_URL:-http://${PUBLIC_HOST:-localhost}:${DOCKER_DOWNLOAD_EXTERNAL_PORT:-8081}}
       AUTH_HOST: ac-authserver

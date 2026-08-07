@@ -43,7 +43,7 @@ def setup_env() -> int:
         shutil.copy(".env.example", ".env")
     else:
         with open(".env", "w", encoding="utf-8") as f:
-            f.write("DOCKER_DB_ROOT_PASSWORD=password\nSESSION_SECRET=please-change-me\n")
+            f.write("DOCKER_DB_ROOT_PASSWORD=password\nSESSION_SECRET=\n")
 
     secret = secrets.token_urlsafe(36)
     with open(".env", "r", encoding="utf-8") as f:
@@ -231,8 +231,17 @@ def doctor() -> int:
     print("── .env ──")
     if os.path.exists(".env"):
         print("  present")
-        if env.get("SESSION_SECRET") == "please-change-me":
-            print("  WARNING: SESSION_SECRET is still default — sessions are forgeable.")
+        # Must stay in step with secret() in webapp/src/lib/session.ts, which
+        # refuses to sign with any of these rather than issuing forgeable
+        # cookies. Reported here too so `task doctor` explains the failure
+        # before compose does.
+        session_secret = env.get("SESSION_SECRET", "")
+        if not session_secret:
+            print("  WARNING: SESSION_SECRET is unset — the stack will refuse to start.")
+        elif session_secret in ("please-change-me", "change-me-session-secret"):
+            print("  WARNING: SESSION_SECRET is still the example value — sessions are forgeable.")
+        elif len(session_secret) < 16:
+            print("  WARNING: SESSION_SECRET is shorter than 16 characters — sessions are guessable.")
     else:
         print("  MISSING — the stack is running on compose defaults. Run: task setup")
 

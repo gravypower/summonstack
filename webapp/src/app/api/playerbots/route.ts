@@ -1,8 +1,11 @@
 import { errorResponse, HttpError, requireSession } from "@/lib/auth";
 import { getPool, WEB_DB } from "@/lib/db";
-import { listRealmsWithConfig } from "@/lib/realm";
+import { getRealmConfigById, listRealmsWithConfig } from "@/lib/realm";
 import { soapCommand } from "@/lib/soap";
 import type { RowDataPacket } from "mysql2";
+
+/** AC character names are plain letters; this also guards SOAP interpolation. */
+const NAME_RE = /^[A-Za-z]{2,12}$/;
 
 export interface BotInfo {
   guid: number;
@@ -68,6 +71,29 @@ export async function GET(): Promise<Response> {
   }
 }
 
+/**
+ * The character's name as stored, or null when it is not on this account.
+ *
+ * Both the name and the realm arrive from the client, and the name is
+ * interpolated into a worldserver console command — so without this check any
+ * token holder could add or delete *another player's* character as a random
+ * bot on any realm.
+ */
+async function findOwnedCharacter(
+  accountId: number,
+  realmId: number,
+  name: string
+): Promise<string | null> {
+  const realm = await getRealmConfigById(realmId);
+  if (!realm) return null;
+  const [rows] = await getPool().query<RowDataPacket[]>(
+    `SELECT name FROM \`${realm.charsDb}\`.characters
+      WHERE name = ? AND account = ? AND deleteInfos_Account IS NULL`,
+    [name, accountId]
+  );
+  return rows[0] ? String(rows[0].name) : null;
+}
+
 export async function POST(req: Request): Promise<Response> {
   try {
     const session = await requireSession();
@@ -80,8 +106,13 @@ export async function POST(req: Request): Promise<Response> {
     if (action !== "login" && action !== "logout") {
       throw new HttpError(400, "Action must be 'login' or 'logout'.");
     }
+    const requestedName = characterName.trim();
+    if (!NAME_RE.test(requestedName)) {
+      throw new HttpError(400, "That is not a valid character name.");
+    }
 
-    const targetRealmId = typeof realmId === "number" ? realmId : 1;
+    const targetRealmId =
+      Number.isInteger(realmId) && realmId > 0 ? Number(realmId) : 1;
 
     // Ensure the user has purchased a playerbot_slot
     const pool = getPool();
@@ -100,11 +131,26 @@ export async function POST(req: Request): Promise<Response> {
       );
     }
 
+    // Bots are driven by console commands, so the name must be one this
+    // account owns on the realm it names — checked here, after the token check,
+    // so an unowned name is refused rather than executed.
+    const name = await findOwnedCharacter(
+      session.accountId,
+      targetRealmId,
+      requestedName
+    );
+    if (!name || !NAME_RE.test(name)) {
+      throw new HttpError(
+        403,
+        "That character is not on your account on this realm."
+      );
+    }
+
     // Command mapping: mod-playerbots console command
     // playerbots rndbot add <name> or playerbots rndbot delete <name>
     const command = action === "login"
-      ? `playerbots rndbot add ${characterName.trim()}`
-      : `playerbots rndbot delete ${characterName.trim()}`;
+      ? `playerbots rndbot add ${name}`
+      : `playerbots rndbot delete ${name}`;
 
     const soapResult = await soapCommand(command, targetRealmId);
 
@@ -112,7 +158,7 @@ export async function POST(req: Request): Promise<Response> {
       success: soapResult.success,
       output: soapResult.output,
       action,
-      characterName,
+      characterName: name,
     });
   } catch (err) {
     return errorResponse(err);

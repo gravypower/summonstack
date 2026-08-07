@@ -10,8 +10,40 @@ export interface Session {
   exp: number;
 }
 
+/**
+ * Values that have shipped as defaults or examples. A secret everyone can read
+ * off GitHub is no secret: the cookie carries the account id and nothing else,
+ * and requireAdmin() reads gmlevel live for whatever id the token claims — so
+ * anyone able to sign a token can mint an admin session and, through
+ * /api/admin/soap, run worldserver console commands.
+ */
+const PLACEHOLDER_SECRETS = new Set([
+  "please-change-me",
+  "change-me-session-secret",
+]);
+
+const MIN_SECRET_LENGTH = 16;
+
+/**
+ * Throws rather than falling back, so a misconfigured deploy fails loudly at
+ * the first login instead of running with forgeable cookies. Anonymous
+ * browsing is unaffected: parseSessionToken() returns before signing when
+ * there is no cookie to check.
+ */
 function secret(): string {
-  return process.env.SESSION_SECRET || "please-change-me";
+  const value = process.env.SESSION_SECRET ?? "";
+  if (
+    !value ||
+    PLACEHOLDER_SECRETS.has(value) ||
+    value.length < MIN_SECRET_LENGTH
+  ) {
+    throw new Error(
+      "SESSION_SECRET is unset, still the example value, or shorter than " +
+        `${MIN_SECRET_LENGTH} characters. Set it to a long random string in ` +
+        ".env (openssl rand -base64 32) and restart ac-webapp."
+    );
+  }
+  return value;
 }
 
 function sign(data: string): string {
