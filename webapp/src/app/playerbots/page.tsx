@@ -185,7 +185,9 @@ export default function PlayerbotsUserPage() {
           <div className="card" style={{ marginBottom: "1.5rem" }}>
             <h2>Custom Bot Command</h2>
             <p className="muted" style={{ fontSize: "0.875rem" }}>
-              Summon or dismiss any specific bot by character name.
+              Summon or dismiss one of your own characters by name. Characters
+              on other accounts are refused — bots run as console commands, so
+              you can only drive the ones you own.
             </p>
 
             <form
