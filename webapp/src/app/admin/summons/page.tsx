@@ -16,6 +16,8 @@ interface SummonRewards {
 }
 
 interface Leader {
+  /** Guids restart at 1 per realm, so the pair is what identifies a summoner. */
+  realmId: number;
   guid: number;
   name: string;
   summons: number;
@@ -510,7 +512,7 @@ export default function AdminSummonsPage() {
               </thead>
               <tbody>
                 {stats.top.map((leader) => (
-                  <tr key={leader.guid}>
+                  <tr key={`${leader.realmId}-${leader.guid}`}>
                     <td className="mono">{leader.name}</td>
                     <td>{leader.summons}</td>
                     <td>

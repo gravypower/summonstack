@@ -180,7 +180,7 @@ export default async function HomePage() {
                 </thead>
                 <tbody>
                   {summons.top.map((leader) => (
-                    <tr key={leader.guid}>
+                    <tr key={`${leader.realmId}-${leader.guid}`}>
                       <td className="mono">{leader.name}</td>
                       <td>{leader.summons}</td>
                       <td>

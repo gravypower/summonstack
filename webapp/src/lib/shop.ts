@@ -10,7 +10,7 @@
 //     can never be delivered or refunded twice.
 import type { ResultSetHeader, RowDataPacket } from "mysql2";
 import { HttpError } from "./auth";
-import { AUTH_DB, CHARS_DB, WEB_DB, ensureWebDb, getPool } from "./db";
+import { AUTH_DB, WEB_DB, ensureWebDb, getPool } from "./db";
 import { getRealmConfigById, listRealmsWithConfig } from "./realm";
 import { soapCommand } from "./soap";
 
@@ -86,12 +86,32 @@ class DeliveryError extends Error {
   }
 }
 
-async function soapOrThrow(command: string): Promise<string> {
-  const res = await soapCommand(command);
+/**
+ * Every delivery command is addressed to the realm the character lives on.
+ * Without the realm id soapCommand() falls back to SOAP_URL — realm 1 — so a
+ * purchase made on any other realm was executed against whoever held that
+ * name on realm 1.
+ */
+async function soapOrThrow(command: string, realmId: number): Promise<string> {
+  const res = await soapCommand(command, realmId);
   if (!res.success) {
     throw new DeliveryError(res.unreachable ? "unreachable" : "fault", res.output);
   }
   return res.output;
+}
+
+/**
+ * The character database for a realm, or null when the realm is unknown.
+ *
+ * There is deliberately no fallback to a default: the old CHARS_DB constant
+ * names the single-realm database from before realms.yml existed, and on a
+ * manifest-driven install it belongs to no realm at all. Reading it returns
+ * nothing and writing it touches an unrelated character, both silently — so
+ * every caller here refuses instead.
+ */
+async function charsDbForRealm(realmId: number): Promise<string | null> {
+  const config = await getRealmConfigById(realmId).catch(() => null);
+  return config?.charsDb ?? null;
 }
 
 // ── Reads ──────────────────────────────────────────────────────────────────
@@ -476,7 +496,7 @@ async function getOwnedCharacter(
   throw new HttpError(404, "That character is not on your account.");
 }
 
-async function getKnownProfessionSkills(guid: number, charsDb: string = CHARS_DB): Promise<number[]> {
+async function getKnownProfessionSkills(guid: number, charsDb: string): Promise<number[]> {
   const [rows] = await getPool().query<RowDataPacket[]>(
     `SELECT skill FROM \`${charsDb}\`.character_skills
       WHERE guid = ? AND skill IN (?)`,
@@ -560,7 +580,11 @@ async function resolveSnapshot(
         "Log the character out first — profession boosts are applied while offline."
       );
     }
-    const known = await getKnownProfessionSkills(character.guid);
+    const charsDb = await charsDbForRealm(character.realm_id);
+    if (!charsDb) {
+      throw new HttpError(500, `Realm ${character.realm_id} is not configured.`);
+    }
+    const known = await getKnownProfessionSkills(character.guid, charsDb);
     if (known.length === 0) {
       throw new HttpError(409, `${character.name} has no professions to boost.`);
     }
@@ -646,13 +670,22 @@ export async function deliver(txnId: number): Promise<void> {
   const snapshot = asJson<Snapshot>(txn.payload_snapshot);
 
   try {
+    // Everything below is scoped to the realm the purchase was made on. Guids
+    // and names are per-realm, and so is the worldserver that has to run the
+    // command — resolving the database here means one lookup for all of them.
+    const realmId = txn.realm_id || 1;
+    const charsDb = await charsDbForRealm(realmId);
+    if (!charsDb) {
+      throw new DeliveryError("fault", `Realm ${realmId} is no longer configured.`);
+    }
+
     // Address by the name freshly re-read by guid (renames since purchase),
     // and re-validate before it goes anywhere near a console command.
-    const name = await getCurrentCharacterName(txn.character_guid, txn.realm_id);
+    const name = await getCurrentCharacterName(txn.character_guid, charsDb);
 
     if (snapshot.type === "level_boost") {
       // Works whether the character is online or offline.
-      await soapOrThrow(`.character level ${name} ${snapshot.level}`);
+      await soapOrThrow(`.character level ${name} ${snapshot.level}`, realmId);
     } else if (snapshot.type === "item_pack") {
       let sent = 0;
       for (let i = 0; i < snapshot.mails.length; i++) {
@@ -662,7 +695,8 @@ export async function deliver(txnId: number): Promise<void> {
         try {
           await soapOrThrow(
             `.send items ${name} "SummonStack Shop (${i + 1}/${snapshot.mails.length})" ` +
-              `"Thanks for your purchase!" ${items}`
+              `"Thanks for your purchase!" ${items}`,
+            realmId
           );
           sent++;
         } catch (err) {
@@ -677,7 +711,7 @@ export async function deliver(txnId: number): Promise<void> {
         }
       }
     } else if (snapshot.type === "profession_boost") {
-      await deliverProfessionBoost(txn.character_guid, snapshot.skillCap);
+      await deliverProfessionBoost(txn.character_guid, snapshot.skillCap, charsDb);
     } else if (snapshot.type === "xp_lock") {
       await deliverXpLock(txn, snapshot);
     } else if (snapshot.type === "playerbot_slot") {
@@ -705,12 +739,7 @@ export async function deliver(txnId: number): Promise<void> {
   }
 }
 
-async function getCurrentCharacterName(guid: number, realmId: number = 1): Promise<string> {
-  let charsDb = CHARS_DB;
-  if (realmId) {
-    const rConfig = await getRealmConfigById(realmId).catch(() => null);
-    if (rConfig?.charsDb) charsDb = rConfig.charsDb;
-  }
+async function getCurrentCharacterName(guid: number, charsDb: string): Promise<string> {
   const [rows] = await getPool().query<RowDataPacket[]>(
     `SELECT name FROM \`${charsDb}\`.characters
       WHERE guid = ? AND deleteInfos_Account IS NULL`,
@@ -780,28 +809,32 @@ async function deliverXpLock(
   }
 }
 
-async function deliverProfessionBoost(guid: number, cap: number): Promise<void> {
+async function deliverProfessionBoost(
+  guid: number,
+  cap: number,
+  charsDb: string
+): Promise<void> {
   const pool = getPool();
-  await assertOffline(guid);
+  await assertOffline(guid, charsDb);
 
-  const known = await getKnownProfessionSkills(guid);
+  const known = await getKnownProfessionSkills(guid, charsDb);
   if (known.length === 0) {
     throw new DeliveryError("fault", "Character has no professions to boost.");
   }
   await pool.query(
-    `UPDATE \`${CHARS_DB}\`.character_skills
+    `UPDATE \`${charsDb}\`.character_skills
         SET value = ?, max = ?
       WHERE guid = ? AND skill IN (?)`,
     [cap, cap, guid, known]
   );
   // If they logged in mid-write, their in-memory state will clobber the
   // update on next save — treat as failed so the refund path runs.
-  await assertOffline(guid);
+  await assertOffline(guid, charsDb);
 }
 
-async function assertOffline(guid: number): Promise<void> {
+async function assertOffline(guid: number, charsDb: string): Promise<void> {
   const [rows] = await getPool().query<RowDataPacket[]>(
-    `SELECT online FROM \`${CHARS_DB}\`.characters WHERE guid = ?`,
+    `SELECT online FROM \`${charsDb}\`.characters WHERE guid = ?`,
     [guid]
   );
   if (Number(rows[0]?.online ?? 1) !== 0) {

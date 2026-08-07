@@ -2,8 +2,15 @@ import mysql from "mysql2/promise";
 import type { RowDataPacket } from "mysql2";
 
 export const AUTH_DB = process.env.AUTH_DB || "acore_auth";
-export const CHARS_DB = process.env.CHARS_DB || "acore_characters";
 export const WEB_DB = process.env.WEB_DB || "summonstack_web";
+
+// There is deliberately no CHARS_DB export. The character database differs per
+// realm (acore_characters_1, acore_characters_pb_2 …), so a single constant
+// named no realm at all once realms.yml took over — reads returned nothing and
+// writes landed on an unrelated character, both silently. Get the database
+// from getRealmConfig()/getRealmConfigById() in lib/realm.ts instead, which
+// resolves it per realm from the manifest. (The same reasoning is written out
+// at the top of worldserver/lua_scripts/summons.lua, which hit this first.)
 
 declare global {
   // eslint-disable-next-line no-var

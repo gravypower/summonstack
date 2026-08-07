@@ -13,7 +13,8 @@
 //     if two sweeps run at once.
 import type { ResultSetHeader, RowDataPacket } from "mysql2";
 import { HttpError } from "./auth";
-import { AUTH_DB, CHARS_DB, WEB_DB, ensureWebDb, getPool } from "./db";
+import { AUTH_DB, WEB_DB, ensureWebDb, getPool } from "./db";
+import { listRealmsWithConfig } from "./realm";
 
 /** The Lua script polls every 15s, so a longer gap means it is not reading. */
 const HEARTBEAT_SECONDS = 60;
@@ -188,17 +189,31 @@ export async function listSummonBonuses(): Promise<SummonBonus[]> {
   );
   if (rows.length === 0) return [];
 
-  const [chars] = await pool.query<RowDataPacket[]>(
-    `SELECT account, name FROM \`${CHARS_DB}\`.characters
-      WHERE account IN (?) AND deleteInfos_Account IS NULL
-      ORDER BY level DESC, name`,
-    [rows.map((r) => Number(r.account_id))]
-  );
+  // A bounty is on the account, and an account's characters are spread across
+  // every realm — so the names players are told to look for have to come from
+  // all of them. Queried per realm rather than from one hardcoded database,
+  // which named no realm at all once realms.yml took over and left every
+  // bounty with an empty character list (and so hidden from the UI, which
+  // filters them out).
+  const accountIds = rows.map((r) => Number(r.account_id));
+  const realms = await listRealmsWithConfig();
   const byAccount = new Map<number, string[]>();
-  for (const c of chars) {
-    const list = byAccount.get(Number(c.account)) ?? [];
-    list.push(String(c.name));
-    byAccount.set(Number(c.account), list);
+  for (const realm of realms) {
+    try {
+      const [chars] = await pool.query<RowDataPacket[]>(
+        `SELECT account, name FROM \`${realm.charsDb}\`.characters
+          WHERE account IN (?) AND deleteInfos_Account IS NULL
+          ORDER BY level DESC, name`,
+        [accountIds]
+      );
+      for (const c of chars) {
+        const list = byAccount.get(Number(c.account)) ?? [];
+        list.push(String(c.name));
+        byAccount.set(Number(c.account), list);
+      }
+    } catch {
+      // A realm whose database is not imported yet contributes no names.
+    }
   }
 
   return rows.map((r) => ({
@@ -447,6 +462,8 @@ async function credit(
 // ── Reads ──────────────────────────────────────────────────────────────────
 
 export interface SummonLeader {
+  /** Guids restart at 1 in every character database, so one alone is ambiguous. */
+  realmId: number;
   guid: number;
   /** Current character name, falling back to the name at the last summon. */
   name: string;
@@ -473,30 +490,75 @@ export async function getSummonStats(limit = 5): Promise<SummonStats> {
             COALESCE(SUM(award_state = 'pending'), 0) AS pending
        FROM \`${WEB_DB}\`.summon_events`
   );
+  // Grouped by realm as well as guid: guids restart at 1 in every character
+  // database, so grouping on the guid alone merged two realms' summoners into
+  // one leaderboard row and credited both to whichever name won.
   const [top] = await pool.query<RowDataPacket[]>(
-    `SELECT e.summoner_guid AS guid,
-            COALESCE(c.name, MAX(e.summoner_name)) AS name,
+    `SELECT e.realm_id, e.summoner_guid AS guid,
+            MAX(e.summoner_name) AS name,
             COUNT(*) AS summons,
             COALESCE(SUM(e.awarded_points), 0) AS points
        FROM \`${WEB_DB}\`.summon_events e
-       LEFT JOIN \`${CHARS_DB}\`.characters c ON c.guid = e.summoner_guid
-      GROUP BY e.summoner_guid, c.name
+      GROUP BY e.realm_id, e.summoner_guid
       ORDER BY summons DESC, name
       LIMIT ${Math.max(1, Math.min(50, Math.trunc(limit)))}`
   );
+
+  const leaders: SummonLeader[] = top.map((t) => ({
+    realmId: Number(t.realm_id),
+    guid: Number(t.guid),
+    name: String(t.name),
+    summons: Number(t.summons),
+    points: Number(t.points),
+  }));
+  await resolveCurrentNames(leaders);
+
   const row = totals[0];
   return {
     total: Number(row?.total ?? 0),
     last24h: Number(row?.last24h ?? 0),
     pointsAwarded: Number(row?.points_awarded ?? 0),
     pending: Number(row?.pending ?? 0),
-    top: top.map((t) => ({
-      guid: Number(t.guid),
-      name: String(t.name),
-      summons: Number(t.summons),
-      points: Number(t.points),
-    })),
+    top: leaders,
   };
+}
+
+/**
+ * Replace each leader's frozen summon-time name with the character's current
+ * one, so a rename shows on the leaderboard. Mutates in place.
+ *
+ * Looked up per realm rather than against one hardcoded database: that
+ * database names no realm on a manifest-driven install, so every name fell
+ * back to the recorded one and a rename never appeared.
+ */
+async function resolveCurrentNames(leaders: SummonLeader[]): Promise<void> {
+  if (leaders.length === 0) return;
+  const byRealm = new Map<number, SummonLeader[]>();
+  for (const leader of leaders) {
+    const list = byRealm.get(leader.realmId) ?? [];
+    list.push(leader);
+    byRealm.set(leader.realmId, list);
+  }
+
+  const pool = getPool();
+  for (const realm of await listRealmsWithConfig()) {
+    const group = byRealm.get(realm.id);
+    if (!group) continue;
+    try {
+      const [chars] = await pool.query<RowDataPacket[]>(
+        `SELECT guid, name FROM \`${realm.charsDb}\`.characters WHERE guid IN (?)`,
+        [group.map((leader) => leader.guid)]
+      );
+      const names = new Map(
+        chars.map((c) => [Number(c.guid), String(c.name)])
+      );
+      for (const leader of group) {
+        leader.name = names.get(leader.guid) ?? leader.name;
+      }
+    } catch {
+      // A realm whose database is not imported yet keeps the recorded names.
+    }
+  }
 }
 
 /** The newest summons, for the admin page. */
