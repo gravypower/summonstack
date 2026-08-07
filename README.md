@@ -536,19 +536,38 @@ docker compose up -d
   so banning someone or resetting their password ends their portal session
   immediately rather than whenever the seven-day cookie expires. Changing your
   own password keeps you signed in and drops your other sessions.
-- The portal runs as a production build. `task dev` swaps in a hot-reload
-  container for local work — don't leave that running on a public host, as
-  `next dev` serves stack traces in its error overlay.
+- The portal defaults to a production build. `task dev` switches it to hot
+  reload — convenient locally, but `next dev` serves stack traces in its error
+  overlay, so it is not what a host people can reach should run.
 
-## Development
+## Portal mode: dev or prod
 
-`task up` builds and runs the portal as a production image. While working on
-the portal itself:
+The portal container runs one of two ways, chosen by `WEBAPP_MODE` in `.env`:
+
+| Mode | What runs | Use it for |
+|------|-----------|------------|
+| `prod` (default) | the built image, `node server.js` | anything others can reach |
+| `dev` | `next dev` with `webapp/src` bind-mounted | working on the portal |
+
+Switch with one command — it edits `.env` and recreates just the portal:
 
 ```bash
-task dev      # same stack, portal in hot-reload mode
+task dev      # hot reload
+task prod     # production build
+task mode     # which one is active right now
 ```
 
-That overlays `docker-compose.dev.yml`, which bind-mounts `webapp/src` and
-runs `next dev`. Everything else — databases, realms, downloads — is
-unchanged, so you can switch between the two with `task up` / `task dev`.
+The mode lives in `.env` rather than in a flag because **every** task reads it:
+`task up`, `task logs`, `task restart`, `task rebuild` all act on the mode you
+are in. Passing `-f docker-compose.dev.yml` to `up` alone would have left the
+next command quietly recreating the container in the other mode.
+
+Under the hood the Taskfile turns `WEBAPP_MODE` into `COMPOSE_FILE`. That also
+disables compose's automatic loading of `docker-compose.override.yml`, so the
+generated realm file is listed explicitly — if you run `docker compose`
+directly rather than through `task`, pass the same list:
+
+```bash
+COMPOSE_FILE=docker-compose.yml:docker-compose.override.yml:docker-compose.dev.yml \
+  docker compose ps
+```

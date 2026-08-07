@@ -65,19 +65,39 @@ jobs:
         env:
           SESSION_SECRET: a-secret-long-enough-for-ci
 
-      - name: The hot-reload overlay is valid too
-        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml config -q
+      # WEBAPP_MODE picks between these two. Both have to render, and each has
+      # to render as the mode it claims — a silent fallback to the other is
+      # exactly the failure this is here to catch.
+      - name: Each portal mode renders as itself
+        run: |
+          target_for() {
+            COMPOSE_FILE="$1" docker compose config --format json \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin)["services"]["ac-webapp"]["build"]["target"])'
+          }
+          prod=$(target_for "docker-compose.yml")
+          dev=$(target_for "docker-compose.yml:docker-compose.dev.yml")
+          echo "prod target: $prod / dev target: $dev"
+          # Unset WEBAPP_MODE must mean production: `next dev` recompiles per
+          # request and serves stack traces from its error overlay.
+          [ "$prod" = "runner" ] || { echo "default should be the runner stage" >&2; exit 1; }
+          [ "$dev" = "dev" ] || { echo "dev overlay should select the dev stage" >&2; exit 1; }
         env:
           SESSION_SECRET: a-secret-long-enough-for-ci
 
-      # The portal must not ship as a dev server: `next dev` recompiles per
-      # request and serves stack traces from its error overlay.
-      - name: The default build is the production image
+      # The generated realm override stops being auto-loaded once COMPOSE_FILE
+      # is set, so the Taskfile lists it explicitly. If that ever regressed,
+      # every realm would vanish from the stack.
+      - name: Setting COMPOSE_FILE does not drop the realm override
         run: |
-          target=$(docker compose config --format json \
-            | python3 -c 'import json,sys; print(json.load(sys.stdin)["services"]["ac-webapp"]["build"]["target"])')
-          echo "ac-webapp build target: $target"
-          [ "$target" = "runner" ] || { echo "expected the runner stage" >&2; exit 1; }
+          printf 'services:\n  ac-realm-1:\n    image: alpine\n' > docker-compose.override.yml
+          for files in \
+            "docker-compose.yml:docker-compose.override.yml" \
+            "docker-compose.yml:docker-compose.override.yml:docker-compose.dev.yml"; do
+            COMPOSE_FILE="$files" docker compose config --services | grep -qx ac-realm-1 \
+              || { echo "realm service missing with COMPOSE_FILE=$files" >&2; exit 1; }
+          done
+          rm -f docker-compose.override.yml
+          echo "ok: realm override survives in both modes"
         env:
           SESSION_SECRET: a-secret-long-enough-for-ci
 

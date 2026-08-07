@@ -494,6 +494,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("fix-perms", help="make config dirs writable by container user").set_defaults(func=lambda args: ops.fix_perms() or 0)
     sub.add_parser("setup", help="create .env with random session secret").set_defaults(func=lambda args: ops.setup_env())
 
+    wm_p = sub.add_parser("webapp-mode", help="show or set WEBAPP_MODE (prod|dev) in .env")
+    wm_p.add_argument("mode", nargs="?", choices=list(ops.VALID_WEBAPP_MODES))
+    wm_p.set_defaults(func=lambda args: ops.webapp_mode(args.mode))
+
     sc_p = sub.add_parser("soap-check", help="verify worldserver SOAP credentials")
     sc_p.add_argument("--port", type=int, default=None)
     sc_p.set_defaults(func=lambda args: ops.soap_check(args.port))
