@@ -728,7 +728,24 @@ export async function deliver(txnId: number): Promise<void> {
     const kind = err instanceof DeliveryError ? err.kind : "fault";
     if (kind === "fault") {
       // Clean rejection: nothing was granted, safe to refund.
-      await refund(txn, e.message);
+      //
+      // A refund that itself fails must not escape: purchase() awaits this,
+      // so throwing here surfaced as a 500 on a purchase whose money had
+      // already moved, leaving the row stuck in 'delivering' with no record of
+      // why. Park it for admin review instead, the same as an unreachable
+      // worldserver — the status guard in refund() means a later retry still
+      // pays out exactly once.
+      try {
+        await refund(txn, e.message);
+      } catch (refundErr) {
+        console.error(`refund failed for transaction ${txnId}`, refundErr);
+        await setStatus(
+          txnId,
+          "delivering",
+          "failed",
+          `${e.message} — and the refund failed: ${(refundErr as Error).message}`
+        ).catch(() => {});
+      }
     } else {
       // 'unreachable' (effect unknown — may have executed) and 'partial'
       // must NOT auto-refund. Park for admin review; the sweep query is

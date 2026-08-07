@@ -214,6 +214,26 @@ const SUMMON_DDL = [
    ) ENGINE=InnoDB`,
 ];
 
+/**
+ * MySQL has no ADD COLUMN IF NOT EXISTS, so re-running a migration on an
+ * install that already has the column is normal and must not fail.
+ *
+ * Only ER_DUP_FIELDNAME is swallowed. These blocks used to be `catch {}`,
+ * which made a permission error, a lock timeout or a typo look exactly like
+ * "already applied" — the app then carried on against a half-migrated schema
+ * and the realm-scoping bugs this column exists to fix came back silently.
+ */
+async function addColumnIfMissing(
+  pool: mysql.Pool,
+  sql: string
+): Promise<void> {
+  try {
+    await pool.query(sql);
+  } catch (err) {
+    if ((err as { code?: string }).code !== "ER_DUP_FIELDNAME") throw err;
+  }
+}
+
 /** Create the webapp's own database/tables on first use. */
 export async function ensureWebDb(): Promise<void> {
   if (!global.__ssWebDbReady) {
@@ -274,42 +294,44 @@ export async function ensureWebDb(): Promise<void> {
       await pool.query(
         `INSERT IGNORE INTO \`${WEB_DB}\`.xp_event (id) VALUES (1), (2)`
       );
-      // Migrations for multi-realm support
-      try {
-        await pool.query(
-          `ALTER TABLE \`${WEB_DB}\`.shop_xp_locks ADD COLUMN realm_id INT UNSIGNED NOT NULL DEFAULT 1 AFTER account_id`
-        );
-      } catch {}
-      try {
-        await pool.query(
-          `ALTER TABLE \`${WEB_DB}\`.shop_transactions ADD COLUMN realm_id INT UNSIGNED NOT NULL DEFAULT 1 AFTER account_id`
-        );
-      } catch {}
-      try {
-        await pool.query(
-          `ALTER TABLE \`${WEB_DB}\`.summon_events ADD COLUMN realm_id INT UNSIGNED NOT NULL DEFAULT 1 AFTER id`
-        );
-      } catch {}
+      // Migrations for multi-realm support. Each adds a column that newer
+      // installs already have from the CREATE above, so "duplicate column" is
+      // the expected outcome and the only one worth swallowing — see
+      // addColumnIfMissing.
+      await addColumnIfMissing(
+        pool,
+        `ALTER TABLE \`${WEB_DB}\`.shop_xp_locks ADD COLUMN realm_id INT UNSIGNED NOT NULL DEFAULT 1 AFTER account_id`
+      );
+      await addColumnIfMissing(
+        pool,
+        `ALTER TABLE \`${WEB_DB}\`.shop_transactions ADD COLUMN realm_id INT UNSIGNED NOT NULL DEFAULT 1 AFTER account_id`
+      );
+      await addColumnIfMissing(
+        pool,
+        `ALTER TABLE \`${WEB_DB}\`.summon_events ADD COLUMN realm_id INT UNSIGNED NOT NULL DEFAULT 1 AFTER id`
+      );
       // Widen the lock key to include the realm. Must run after the realm_id
       // column exists above. While the key was character_guid alone, a second
       // realm's character with the same guid collided with the first realm's
       // row instead of getting one of its own — so a lock bought on one realm
       // silently overwrote an unrelated character's lock on another.
-      try {
-        const [pk] = await pool.query<RowDataPacket[]>(
-          `SELECT COUNT(*) AS n FROM information_schema.STATISTICS
-            WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'shop_xp_locks'
-              AND INDEX_NAME = 'PRIMARY'`,
-          [WEB_DB]
+      //
+      // Guarded by inspecting the current key rather than by catching: getting
+      // this wrong reintroduces that bug silently, so a failure here has to
+      // reach the caller.
+      const [pk] = await pool.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS n FROM information_schema.STATISTICS
+          WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'shop_xp_locks'
+            AND INDEX_NAME = 'PRIMARY'`,
+        [WEB_DB]
+      );
+      // One column in the primary key means it is still the old guid-only key.
+      if (Number(pk[0]?.n ?? 0) === 1) {
+        await pool.query(
+          `ALTER TABLE \`${WEB_DB}\`.shop_xp_locks
+             DROP PRIMARY KEY, ADD PRIMARY KEY (realm_id, character_guid)`
         );
-        // One column in the primary key means it is still the old guid-only key.
-        if (Number(pk[0]?.n ?? 0) === 1) {
-          await pool.query(
-            `ALTER TABLE \`${WEB_DB}\`.shop_xp_locks
-               DROP PRIMARY KEY, ADD PRIMARY KEY (realm_id, character_guid)`
-          );
-        }
-      } catch {}
+      }
     })().catch((err) => {
       global.__ssWebDbReady = undefined;
       throw err;

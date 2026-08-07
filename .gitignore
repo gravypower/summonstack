@@ -3,6 +3,8 @@ node_modules/
 .next/
 webapp/next-env.d.ts
 webapp/tsconfig.tsbuildinfo
+# src/lib compiled to CommonJS by `npm test` so node --test can require it.
+webapp/.test-build/
 ChromieCraft_3.3.5a.zip
 
 # Large local test artifacts for the download server.

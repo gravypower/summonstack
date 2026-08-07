@@ -293,6 +293,7 @@ export function getRealmConfig(realm: Realm): RealmConfig {
   const entry = manifestRealm(id);
 
   const legacy = legacyRealmConfig(id);
+  if (!entry) warnLegacyGuess(id, legacy);
 
   const worldPortOverride = override("WORLD_PORT");
   return {
@@ -305,6 +306,29 @@ export function getRealmConfig(realm: Realm): RealmConfig {
       ? Number(worldPortOverride)
       : entry?.worldPort || legacy.worldPort,
   };
+}
+
+/** Realms already warned about, so the log is one line per realm, not per request. */
+const warnedRealms = new Set<number>();
+
+/**
+ * The manifest is the source of truth for where a realm lives, and compose
+ * mounts it. Falling through to the guesses below means it is missing or
+ * unreadable — at which point the portal is talking to databases and
+ * worldservers derived from an id, which stopped matching what the compose
+ * generator produces once realms.yml could name them freely.
+ *
+ * Silently guessing is how a realm ends up reading an empty database and
+ * reporting nothing wrong, so say it once per realm.
+ */
+function warnLegacyGuess(id: number, legacy: RealmEndpoints): void {
+  if (warnedRealms.has(id)) return;
+  warnedRealms.add(id);
+  console.warn(
+    `[realm ${id}] no manifest entry — falling back to guessed endpoints ` +
+      `(charsDb=${legacy.charsDb}, worldHost=${legacy.worldHost}). ` +
+      "Run `task realm:render` and check webapp/generated/realms.json is mounted."
+  );
 }
 
 interface RealmEndpoints {
