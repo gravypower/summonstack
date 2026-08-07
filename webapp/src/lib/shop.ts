@@ -172,7 +172,13 @@ export async function getXpLock(guid: number, realmId: number = 1): Promise<numb
   return rows[0] ? Number(rows[0].target_level) : null;
 }
 
-/** Every live lock on an account's characters, keyed by guid & realm, for the UI. */
+/**
+ * Every live lock on an account's characters, keyed `<realmId>:<guid>`.
+ *
+ * Keyed on the pair and nothing else: a bare guid key used to be published
+ * alongside it, and the one caller read that — so a lock bought on one realm
+ * showed on an unrelated character with the same guid on another.
+ */
 export async function listXpLocks(
   accountId: number
 ): Promise<Record<string, number>> {
@@ -185,11 +191,9 @@ export async function listXpLocks(
   );
   const out: Record<string, number> = {};
   for (const r of rows) {
-    const guid = Number(r.character_guid);
-    const realmId = Number(r.realm_id);
-    const level = Number(r.target_level);
-    out[`${realmId}:${guid}`] = level;
-    out[String(guid)] = level;
+    out[`${Number(r.realm_id)}:${Number(r.character_guid)}`] = Number(
+      r.target_level
+    );
   }
   return out;
 }

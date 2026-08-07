@@ -10,10 +10,19 @@ interface Character {
   class: number;
   level: number;
   online: boolean;
-  realm_id?: number;
-  realm_name?: string;
+  realmId: number;
+  realmName: string;
   /** Level this character's XP is held at, or null if it still levels. */
   xpLockedAt: number | null;
+}
+
+/**
+ * What identifies a character in this form. Guids restart at 1 in every
+ * character database, so the guid alone picked whichever realm's character
+ * the server happened to find first.
+ */
+function charKey(c: Character): string {
+  return `${c.realmId}:${c.guid}`;
 }
 
 interface Product {
@@ -102,7 +111,8 @@ export default function ShopPage() {
 
   // Purchase panel state (one panel open at a time).
   const [active, setActive] = useState<string | null>(null);
-  const [charGuid, setCharGuid] = useState<number>(0);
+  // "<realmId>:<guid>", not a bare guid — see charKey().
+  const [selectedChar, setSelectedChar] = useState<string>("");
   const [spec, setSpec] = useState<string>("");
   const [idemKey, setIdemKey] = useState<string>("");
   const [busy, setBusy] = useState(false);
@@ -133,7 +143,7 @@ export default function ShopPage() {
 
   function openPanel(slug: string) {
     setActive(slug);
-    setCharGuid(0);
+    setSelectedChar("");
     setSpec("");
     setMsg(null);
     // Minted when the panel opens: double-clicking Buy replays the same
@@ -142,7 +152,8 @@ export default function ShopPage() {
   }
 
   const product = products.find((p) => p.slug === active) ?? null;
-  const character = characters.find((c) => c.guid === charGuid) ?? null;
+  const character =
+    characters.find((c) => charKey(c) === selectedChar) ?? null;
   const specOptions =
     product?.specsByClass && character
       ? product.specsByClass[character.class] ?? []
@@ -185,6 +196,9 @@ export default function ShopPage() {
       body: JSON.stringify({
         productSlug: product.slug,
         characterGuid: character.guid,
+        // Without this the server falls back to scanning realms by guid and
+        // can resolve a different realm's character of the same guid.
+        realmId: character.realmId,
         spec: needsSpec ? spec : null,
         idempotencyKey: idemKey,
       }),
@@ -291,25 +305,25 @@ export default function ShopPage() {
                   <span>Character</span>
                   <select
                     className="input"
-                    value={charGuid}
+                    value={selectedChar}
                     onChange={(e) => {
-                      setCharGuid(Number(e.target.value));
+                      setSelectedChar(e.target.value);
                       setSpec("");
                     }}
                     required
                   >
-                    <option value={0} disabled>
+                    <option value="" disabled>
                       Pick a character…
                     </option>
                     {characters.map((c) => {
                       const reason = ineligible(p, c);
                       return (
                         <option
-                          key={c.guid}
-                          value={c.guid}
+                          key={charKey(c)}
+                          value={charKey(c)}
                           disabled={reason !== null}
                         >
-                          {c.realm_name ? `[${c.realm_name}] ` : ""}
+                          {c.realmName ? `[${c.realmName}] ` : ""}
                           {c.name} — {CLASS_NAMES[c.class] ?? "?"} {c.level}
                           {reason
                             ? ` (${reason})`

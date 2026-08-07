@@ -46,10 +46,14 @@ export async function GET(): Promise<Response> {
         race: c.race,
         class: c.class,
         level: c.level,
+        // Guids restart at 1 in every character database, so the realm is what
+        // makes a character identifiable — the shop sends it back on purchase.
+        realmId: c.realm_id,
+        realmName: c.realm_name,
         // The shop UI uses this to warn profession-boost buyers to log out.
         online: c.online !== 0,
         // Level this character's XP is held at, or null if it still levels.
-        xpLockedAt: xpLocks[c.guid] ?? null,
+        xpLockedAt: xpLocks[`${c.realm_id}:${c.guid}`] ?? null,
       })),
     });
   } catch (err) {
