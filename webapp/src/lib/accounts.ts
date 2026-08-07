@@ -49,11 +49,16 @@ export async function findAccountByUsername(
   return rows[0] ?? null;
 }
 
+/**
+ * Returns the new account id and the salt it was created with — the caller
+ * needs the salt to stamp the session cookie, and re-reading it back out just
+ * to hash it would be a second round trip for something we just generated.
+ */
 export async function createGameAccount(
   username: string,
   password: string,
   email: string
-): Promise<number> {
+): Promise<{ id: number; salt: Buffer }> {
   const pool = getPool();
   const { salt, verifier } = makeRegistrationData(username, password);
   const [result] = await pool.query<ResultSetHeader>(
@@ -62,14 +67,15 @@ export async function createGameAccount(
      VALUES (?, ?, ?, ?, ?, NOW(), 2)`,
     [username.toUpperCase(), salt, verifier, email, email]
   );
-  return result.insertId;
+  return { id: result.insertId, salt };
 }
 
+/** Returns the new salt, so the caller can re-stamp its own session cookie. */
 export async function setAccountPassword(
   accountId: number,
   username: string,
   password: string
-): Promise<void> {
+): Promise<Buffer> {
   const pool = getPool();
   const { salt, verifier } = makeRegistrationData(username, password);
   // Clear session_key so any cached game session is invalidated.
@@ -79,6 +85,7 @@ export async function setAccountPassword(
       WHERE id = ?`,
     [salt, verifier, accountId]
   );
+  return salt;
 }
 
 export async function isBanned(accountId: number): Promise<boolean> {

@@ -519,6 +519,12 @@ docker compose up -d
 
 ## Security notes
 
+- `SESSION_SECRET` is **required** — the stack refuses to start without it,
+  and the portal refuses to sign a cookie with a value shorter than 16
+  characters or with either of the old example values. The cookie carries an
+  account id and admin rights are read live for whatever it claims, so a
+  guessable signing key is an admin takeover. Generate one with
+  `openssl rand -base64 32`.
 - Keep `.env` private — it holds the DB root password, session-signing
   secret, and SOAP credentials. It is `.gitignore`d.
 - MySQL (3306) and SOAP (7878) are bound to `127.0.0.1` on the host on
@@ -526,3 +532,23 @@ docker compose up -d
 - If you put the site on the public internet, run it behind a reverse proxy
   with HTTPS (Caddy/Traefik/nginx) and set `SITE_URL=https://…` so session
   cookies are marked `Secure`.
+- Sessions are revocable. Every authenticated request re-checks the account,
+  so banning someone or resetting their password ends their portal session
+  immediately rather than whenever the seven-day cookie expires. Changing your
+  own password keeps you signed in and drops your other sessions.
+- The portal runs as a production build. `task dev` swaps in a hot-reload
+  container for local work — don't leave that running on a public host, as
+  `next dev` serves stack traces in its error overlay.
+
+## Development
+
+`task up` builds and runs the portal as a production image. While working on
+the portal itself:
+
+```bash
+task dev      # same stack, portal in hot-reload mode
+```
+
+That overlays `docker-compose.dev.yml`, which bind-mounts `webapp/src` and
+runs `next dev`. Everything else — databases, realms, downloads — is
+unchanged, so you can switch between the two with `task up` / `task dev`.

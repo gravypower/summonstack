@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 
 export const SESSION_COOKIE = "ss_session";
@@ -7,6 +7,15 @@ const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
 export interface Session {
   accountId: number;
   username: string;
+  /**
+   * Fingerprint of the account's SRP salt when the cookie was issued.
+   *
+   * The salt is regenerated on every password change, so a stale fingerprint
+   * is how requireSession() spots a cookie minted before the password moved.
+   * Without it a cookie stayed valid for its full seven days after a password
+   * reset — including one an admin performed to lock someone out.
+   */
+  pv: string;
   exp: number;
 }
 
@@ -50,10 +59,15 @@ function sign(data: string): string {
   return createHmac("sha256", secret()).update(data).digest("base64url");
 }
 
-export function createSessionToken(accountId: number, username: string): string {
+export function createSessionToken(
+  accountId: number,
+  username: string,
+  passwordFingerprint: string
+): string {
   const payload: Session = {
     accountId,
     username,
+    pv: passwordFingerprint,
     exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
   };
   const body = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
@@ -76,7 +90,15 @@ export function parseSessionToken(token: string | undefined): Session | null {
     const payload = JSON.parse(
       Buffer.from(body, "base64url").toString("utf8")
     ) as Session;
-    if (typeof payload.accountId !== "number" || typeof payload.username !== "string") {
+    if (
+      typeof payload.accountId !== "number" ||
+      typeof payload.username !== "string" ||
+      // Cookies issued before password fingerprints existed cannot be checked
+      // against the current password, so they are not honoured — those users
+      // log in again once.
+      typeof payload.pv !== "string" ||
+      typeof payload.exp !== "number"
+    ) {
       return null;
     }
     if (payload.exp < Math.floor(Date.now() / 1000)) return null;
@@ -84,6 +106,17 @@ export function parseSessionToken(token: string | undefined): Session | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * A short, stable fingerprint of the account's SRP salt.
+ *
+ * Only a fingerprint: the salt itself never leaves the server, and a truncated
+ * hash is enough to notice it changed. Not a secret — the cookie is signed, so
+ * this cannot be forged independently of the signature.
+ */
+export function passwordFingerprint(salt: Buffer): string {
+  return createHash("sha256").update(salt).digest("base64url").slice(0, 12);
 }
 
 export async function getSession(): Promise<Session | null> {

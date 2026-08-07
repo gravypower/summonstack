@@ -84,6 +84,22 @@ tasks:
         vars: {WAIT: "900"}
       - task: ps
 
+  dev:
+    desc: Start the stack with the portal in hot-reload mode (development only)
+    cmds:
+      - task: fix-perms
+      - task: realm:render
+      # The generated realm override is only auto-loaded when no -f flags are
+      # given, so it is listed explicitly here alongside the dev overlay.
+      - |
+        files="-f docker-compose.yml"
+        [ -f docker-compose.override.yml ] && files="$files -f docker-compose.override.yml"
+        files="$files -f docker-compose.dev.yml"
+        docker compose $files up -d
+      - task: realm:apply
+        vars: {WAIT: "900"}
+      - task: ps
+
   down:
     desc: Stop the stack (keeps all data)
     cmds:

@@ -144,8 +144,13 @@ const SHOP_DDL = [
 
 // Summon rewards. worldserver/lua_scripts/summons.lua appends one row per
 // counted summon and reads the settings row; the webapp turns rows into
-// points. Kept apart from SHOP_DDL only because the shop predates it — both
-// are duplicated in scripts/seed-shop.mjs.
+// points. Kept apart from SHOP_DDL only because the shop predates it.
+//
+// Unlike SHOP_DDL, these tables are NOT duplicated in scripts/seed-shop.mjs:
+// the seed does not touch them, so they are created here on the first request
+// and nowhere else. test/schema-parity.test.js holds both halves of that to
+// account — the shop tables must match the seed script line for line, and
+// these must stay absent from it.
 const SUMMON_DDL = [
   // 'summon' was added after the first installs, so the enum in the CREATE
   // above will not have it; re-running a MODIFY is harmless.

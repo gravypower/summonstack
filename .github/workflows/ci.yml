@@ -24,11 +24,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: webapp/package-lock.json
 
-      # No package-lock.json is committed, so `npm ci` would fail; cache the
-      # npm download directory instead of relying on a lockfile.
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Typecheck
         run: npm run typecheck
@@ -62,6 +62,22 @@ jobs:
 
       - name: Validates with one set
         run: docker compose config -q
+        env:
+          SESSION_SECRET: a-secret-long-enough-for-ci
+
+      - name: The hot-reload overlay is valid too
+        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml config -q
+        env:
+          SESSION_SECRET: a-secret-long-enough-for-ci
+
+      # The portal must not ship as a dev server: `next dev` recompiles per
+      # request and serves stack traces from its error overlay.
+      - name: The default build is the production image
+        run: |
+          target=$(docker compose config --format json \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["services"]["ac-webapp"]["build"]["target"])')
+          echo "ac-webapp build target: $target"
+          [ "$target" = "runner" ] || { echo "expected the runner stage" >&2; exit 1; }
         env:
           SESSION_SECRET: a-secret-long-enough-for-ci
 

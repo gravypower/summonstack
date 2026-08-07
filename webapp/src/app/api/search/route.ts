@@ -1,4 +1,4 @@
-import { errorResponse, requireSession } from "@/lib/auth";
+import { errorResponse, getGmLevel, HttpError, requireSession } from "@/lib/auth";
 import { AUTH_DB, getPool } from "@/lib/db";
 import { listRealmsWithConfig } from "@/lib/realm";
 import type { RowDataPacket } from "mysql2";
@@ -16,14 +16,33 @@ export interface SearchResultItem {
   accountName?: string;
 }
 
+/**
+ * Who a player may look up.
+ *
+ * This backs an autocomplete, so it has to stay usable — but it used to hand
+ * any logged-in player the entire account list, every character on every
+ * realm, and the account behind each character, on a single-letter match.
+ * Only staff searching for someone to administer needs that; a player picking
+ * one of their own bots does not.
+ *
+ * Accounts are admin-only, the owning account name is admin-only, and the
+ * query has a floor so the endpoint cannot be walked a letter at a time.
+ */
+const MIN_QUERY_LENGTH = 2;
+
 export async function GET(req: Request): Promise<Response> {
   try {
-    await requireSession();
+    const session = await requireSession();
+    const isAdmin = (await getGmLevel(session.accountId)) >= 3;
     const url = new URL(req.url);
     const query = (url.searchParams.get("q") || "").trim();
     const targetType = url.searchParams.get("type") || "all"; // 'character', 'account', or 'all'
 
-    if (!query || query.length < 1) {
+    if (targetType === "account" && !isAdmin) {
+      throw new HttpError(403, "Admin access required to search accounts.");
+    }
+
+    if (query.length < MIN_QUERY_LENGTH) {
       return Response.json({ results: [] });
     }
 
@@ -31,8 +50,8 @@ export async function GET(req: Request): Promise<Response> {
     const results: SearchResultItem[] = [];
     const searchTerm = `%${query}%`;
 
-    // 1. Search Accounts in AUTH_DB
-    if (targetType === "all" || targetType === "account") {
+    // 1. Search Accounts in AUTH_DB — staff only.
+    if (isAdmin && (targetType === "all" || targetType === "account")) {
       const [accRows] = await pool.query<RowDataPacket[]>(
         `SELECT id, username FROM \`${AUTH_DB}\`.account
           WHERE username LIKE ?
@@ -73,7 +92,10 @@ export async function GET(req: Request): Promise<Response> {
               race: Number(c.race),
               realmId: r.id,
               realmName: r.name,
-              accountName: c.account_name ? String(c.account_name) : undefined,
+              // Which account owns a character is staff information: players
+              // need to find a character, not to map the server's alts.
+              accountName:
+                isAdmin && c.account_name ? String(c.account_name) : undefined,
             });
           }
         } catch {}
