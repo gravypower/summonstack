@@ -1,9 +1,9 @@
 import { errorResponse } from "@/lib/auth";
 import {
   awardPendingSummons,
-  getSummonRewards,
   getSummonStats,
   listSummonBonuses,
+  listSummonRewards,
 } from "@/lib/summons";
 
 export const dynamic = "force-dynamic";
@@ -13,9 +13,9 @@ export async function GET(): Promise<Response> {
   try {
     // No scheduler in this stack, so page loads are what settle the backlog.
     await awardPendingSummons();
-    const [stats, rewards, bonuses] = await Promise.all([
+    const [stats, rewardsByRealm, bonuses] = await Promise.all([
       getSummonStats(10),
-      getSummonRewards(),
+      listSummonRewards(),
       listSummonBonuses(),
     ]);
     return Response.json({
@@ -23,12 +23,16 @@ export async function GET(): Promise<Response> {
       last24h: stats.last24h,
       pointsAwarded: stats.pointsAwarded,
       top: stats.top,
-      rewards: {
-        enabled: rewards.enabled,
-        pointsPerSummon: rewards.pointsPerSummon,
-        dailyPointCap: rewards.dailyPointCap,
-        pairCooldownMinutes: rewards.pairCooldownMinutes,
-      },
+      // One entry per realm: what a summon pays differs between them, so
+      // there is no single rate to quote.
+      rewardsByRealm: rewardsByRealm.map((r) => ({
+        realmId: r.realmId,
+        realmName: r.realmName,
+        enabled: r.enabled,
+        pointsPerSummon: r.pointsPerSummon,
+        dailyPointCap: r.dailyPointCap,
+        pairCooldownMinutes: r.pairCooldownMinutes,
+      })),
       // Who is currently worth more (or less) to summon. Character names only:
       // players need to know who to look for, not whose account it is.
       bounties: bonuses

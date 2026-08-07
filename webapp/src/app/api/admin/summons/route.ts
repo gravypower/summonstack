@@ -1,4 +1,5 @@
 import { errorResponse, requireAdmin } from "@/lib/auth";
+import { listRealmsWithConfig } from "@/lib/realm";
 import {
   awardPendingSummons,
   DEFAULT_BONUS_PCT,
@@ -10,17 +11,41 @@ import {
   validateSummonRewards,
 } from "@/lib/summons";
 
-export async function GET(): Promise<Response> {
+/**
+ * Which realm's settings this request is about. Summon rewards are per realm —
+ * one row each — so every read and write has to name one. Defaults to realm 1,
+ * which is the only realm a single-realm install has.
+ */
+function realmIdFrom(value: unknown): number {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : 1;
+}
+
+/** Just enough for the admin page's realm picker. */
+async function realmChoices(): Promise<{ id: number; name: string }[]> {
+  try {
+    return (await listRealmsWithConfig()).map((r) => ({ id: r.id, name: r.name }));
+  } catch {
+    // Databases may not be imported yet on first boot.
+    return [];
+  }
+}
+
+export async function GET(req: Request): Promise<Response> {
   try {
     await requireAdmin();
+    const realmId = realmIdFrom(new URL(req.url).searchParams.get("realmId"));
     const paid = await awardPendingSummons();
-    const [rewards, stats, recent, bonuses] = await Promise.all([
-      getSummonRewards(),
+    const [rewards, realms, stats, recent, bonuses] = await Promise.all([
+      getSummonRewards(realmId),
+      realmChoices(),
       getSummonStats(10),
       listRecentSummons(50),
       listSummonBonuses(),
     ]);
     return Response.json({
+      realmId,
+      realms,
       rewards,
       stats,
       recent,
@@ -37,7 +62,8 @@ export async function POST(req: Request): Promise<Response> {
   try {
     const session = await requireAdmin();
     const body = await req.json().catch(() => ({}));
-    const current = await getSummonRewards();
+    const realmId = realmIdFrom(body.realmId);
+    const current = await getSummonRewards(realmId);
 
     // Fields left out keep their current value.
     const update = {
@@ -71,7 +97,8 @@ export async function POST(req: Request): Promise<Response> {
 
     return Response.json({
       ok: true,
-      rewards: await saveSummonRewards(update, session.username),
+      realmId,
+      rewards: await saveSummonRewards(update, session.username, realmId),
     });
   } catch (err) {
     return errorResponse(err);

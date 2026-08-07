@@ -1,5 +1,6 @@
 import type { RowDataPacket } from "mysql2";
 import { getPool, WEB_DB } from "./db";
+import { listRealmsWithConfig } from "./realm";
 
 /**
  * "Enlightenment" — a dummy aura with no combat effect, picked because 3.3.5a
@@ -156,14 +157,41 @@ export async function saveXpEvent(
     params.push(Math.round(update.endsInHours * 60));
   }
   params.push(username.slice(0, 32));
-  params.push(realmId);
 
+  // Upsert rather than update: only realms 1 and 2 are seeded, so a third
+  // realm would otherwise save into nothing and silently keep the defaults.
+  // realmId is the primary key, so it leads the VALUES list.
   await pool.query(
-    `UPDATE \`${WEB_DB}\`.xp_event
-        SET name = ?, enabled = ?, multiplier_pct = ?, aura_spell = ?,
-            ends_at = ${endsAt}, updated_by = ?, updated_at = NOW()
-      WHERE id = ?`,
-    params
+    `INSERT INTO \`${WEB_DB}\`.xp_event
+       (id, name, enabled, multiplier_pct, aura_spell, ends_at, updated_by,
+        updated_at)
+     VALUES (?, ?, ?, ?, ?, ${endsAt}, ?, NOW())
+     ON DUPLICATE KEY UPDATE
+       name = VALUES(name),
+       enabled = VALUES(enabled),
+       multiplier_pct = VALUES(multiplier_pct),
+       aura_spell = VALUES(aura_spell),
+       ends_at = VALUES(ends_at),
+       updated_by = VALUES(updated_by),
+       updated_at = NOW()`,
+    [realmId, ...params]
   );
   return getXpEvent(realmId);
+}
+
+export interface RealmXpEvent extends XpEvent {
+  realmId: number;
+  realmName: string;
+}
+
+/** The XP event on each realm, for the admin realm picker. */
+export async function listXpEvents(): Promise<RealmXpEvent[]> {
+  const realms = await listRealmsWithConfig();
+  return Promise.all(
+    realms.map(async (realm) => ({
+      realmId: realm.id,
+      realmName: realm.name,
+      ...(await getXpEvent(realm.id)),
+    }))
+  );
 }

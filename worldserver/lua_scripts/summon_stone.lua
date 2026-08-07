@@ -227,9 +227,10 @@ local function refresh()
     return
   end
 
+  -- This realm's own settings row; see the note in summons.lua.
   local query = WorldDBQuery(string.format(
     "SELECT enabled, points_per_summon, announce_every FROM `%s`.summon_rewards " ..
-    "WHERE id = 1", WEB_DB))
+    "WHERE id = %u", WEB_DB, REALM_ID))
   if query then
     state.enabled       = query:GetUInt32(0) == 1
     state.points        = query:GetUInt32(1)

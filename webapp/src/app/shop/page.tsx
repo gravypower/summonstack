@@ -2,6 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  describeRate,
+  groupPayingRates,
+  isUniformRate,
+  joinNames,
+  type RealmRate,
+} from "@/lib/summon-rate";
 
 interface Character {
   guid: number;
@@ -44,10 +51,8 @@ interface Product {
 interface SummonSummary {
   count: number;
   pointsEarned: number;
-  enabled: boolean;
-  pointsPerSummon: number;
-  dailyPointCap: number;
-  pairCooldownMinutes: number;
+  /** What a summon pays, per realm — the rate differs between them. */
+  rewardsByRealm: RealmRate[];
   /** Players who currently pay more than the base rate to summon. */
   bounties: { multiplierPct: number; characters: string[] }[];
 }
@@ -151,6 +156,18 @@ export default function ShopPage() {
     setIdemKey(newIdempotencyKey());
   }
 
+  // What a summon pays, per realm. Collapsed so realms paying the same rate
+  // are quoted once, and named when they differ.
+  const summonRates = summons?.rewardsByRealm ?? [];
+  const summonRateGroups = groupPayingRates(summonRates);
+  const uniformSummonRate = isUniformRate(summonRateGroups, summonRates.length);
+  // The cooldown is quoted as one number; the longest is the safe one to
+  // promise, since a shorter one elsewhere only ever pays sooner.
+  const longestPairCooldown = summonRates.reduce(
+    (max, r) => (r.enabled ? Math.max(max, r.pairCooldownMinutes) : max),
+    0
+  );
+
   const product = products.find((p) => p.slug === active) ?? null;
   const character =
     characters.find((c) => charKey(c) === selectedChar) ?? null;
@@ -253,18 +270,22 @@ export default function ShopPage() {
         </div>
       </div>
 
-      {summons && summons.enabled && summons.pointsPerSummon > 0 && (
+      {summons && summonRateGroups.length > 0 && (
         <p className="muted">
           You have summoned {summons.count} player
           {summons.count === 1 ? "" : "s"} and earned {summons.pointsEarned}{" "}
-          points that way. Every player you summon — warlock ritual or meeting
-          stone — is worth {summons.pointsPerSummon} points
-          {summons.dailyPointCap > 0
-            ? `, up to ${summons.dailyPointCap} a day`
-            : ""}
+          points that way. Every player you summon — warlock ritual, meeting
+          stone or summoning stone — is worth{" "}
+          {uniformSummonRate
+            ? describeRate(summonRateGroups[0])
+            : summonRateGroups
+                .map(
+                  (g) => `${describeRate(g)} on ${joinNames(g.realmNames)}`
+                )
+                .join("; ")}
           . Summoning your own alts pays nothing
-          {summons.pairCooldownMinutes > 0
-            ? `, and the same person only pays again after ${summons.pairCooldownMinutes} minutes`
+          {longestPairCooldown > 0
+            ? `, and the same person only pays again after ${longestPairCooldown} minutes`
             : ""}
           .
           {(summons.bounties ?? []).length > 0 && (

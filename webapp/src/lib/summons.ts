@@ -52,7 +52,19 @@ const DEFAULTS: SummonRewards = {
   worldserverReading: false,
 };
 
-export async function getSummonRewards(): Promise<SummonRewards> {
+/**
+ * One row per realm, keyed by realm id. Each realm's worldserver reads its own
+ * row, so a playerbots realm can pay differently (or not at all) without
+ * touching the main realm's economy.
+ *
+ * A realm that has never been saved has no row and falls back to DEFAULTS —
+ * which are enabled, at 5 points a summon. That is deliberate: a new realm
+ * pays the standard rate until an admin decides otherwise, and never silently
+ * inherits whatever realm 1 happens to be set to.
+ */
+export async function getSummonRewards(
+  realmId: number = 1
+): Promise<SummonRewards> {
   await ensureWebDb();
   // The heartbeat is evaluated by MySQL so it uses the same clock the Lua
   // script writes seen_at with.
@@ -61,8 +73,8 @@ export async function getSummonRewards(): Promise<SummonRewards> {
             announce_every, updated_by, updated_at, seen_at,
             (seen_at IS NOT NULL AND seen_at > NOW() - INTERVAL ? SECOND)
               AS seen_recently
-       FROM \`${WEB_DB}\`.summon_rewards WHERE id = 1`,
-    [HEARTBEAT_SECONDS]
+       FROM \`${WEB_DB}\`.summon_rewards WHERE id = ?`,
+    [HEARTBEAT_SECONDS, realmId]
   );
   const row = rows[0];
   if (!row) return DEFAULTS;
@@ -128,18 +140,31 @@ export function validateSummonRewards(
   return issues;
 }
 
+/**
+ * Upsert rather than update: only realms 1 and 2 are seeded, so a third realm
+ * would otherwise save into nothing and silently keep the defaults.
+ */
 export async function saveSummonRewards(
   update: SummonRewardsUpdate,
-  username: string
+  username: string,
+  realmId: number = 1
 ): Promise<SummonRewards> {
   await ensureWebDb();
   await getPool().query(
-    `UPDATE \`${WEB_DB}\`.summon_rewards
-        SET enabled = ?, points_per_summon = ?, daily_point_cap = ?,
-            pair_cooldown_minutes = ?, announce_every = ?,
-            updated_by = ?, updated_at = NOW()
-      WHERE id = 1`,
+    `INSERT INTO \`${WEB_DB}\`.summon_rewards
+       (id, enabled, points_per_summon, daily_point_cap,
+        pair_cooldown_minutes, announce_every, updated_by, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+     ON DUPLICATE KEY UPDATE
+       enabled = VALUES(enabled),
+       points_per_summon = VALUES(points_per_summon),
+       daily_point_cap = VALUES(daily_point_cap),
+       pair_cooldown_minutes = VALUES(pair_cooldown_minutes),
+       announce_every = VALUES(announce_every),
+       updated_by = VALUES(updated_by),
+       updated_at = NOW()`,
     [
+      realmId,
       update.enabled ? 1 : 0,
       update.pointsPerSummon,
       update.dailyPointCap,
@@ -148,7 +173,24 @@ export async function saveSummonRewards(
       username.slice(0, 32),
     ]
   );
-  return getSummonRewards();
+  return getSummonRewards(realmId);
+}
+
+export interface RealmSummonRewards extends SummonRewards {
+  realmId: number;
+  realmName: string;
+}
+
+/** What a summon pays on each realm, for the admin picker and public pages. */
+export async function listSummonRewards(): Promise<RealmSummonRewards[]> {
+  const realms = await listRealmsWithConfig();
+  return Promise.all(
+    realms.map(async (realm) => ({
+      realmId: realm.id,
+      realmName: realm.name,
+      ...(await getSummonRewards(realm.id)),
+    }))
+  );
 }
 
 // ── Bounties ───────────────────────────────────────────────────────────────
@@ -283,6 +325,7 @@ export async function clearSummonBonus(accountId: number): Promise<void> {
 
 interface PendingRow extends RowDataPacket {
   id: number;
+  realm_id: number;
   summoner_name: string;
   summoner_account: number;
   target_name: string;
@@ -304,8 +347,8 @@ export async function awardPendingSummons(): Promise<number> {
   await ensureWebDb();
   const pool = getPool();
   const [rows] = await pool.query<PendingRow[]>(
-    `SELECT id, summoner_name, summoner_account, target_name, target_account,
-            created_at
+    `SELECT id, realm_id, summoner_name, summoner_account, target_name,
+            target_account, created_at
        FROM \`${WEB_DB}\`.summon_events
       WHERE award_state = 'pending'
       ORDER BY id
@@ -313,12 +356,27 @@ export async function awardPendingSummons(): Promise<number> {
   );
   if (rows.length === 0) return 0;
 
-  // Read once: settling a backlog must not change the price halfway through.
-  const config = await getSummonRewards();
+  // Settings are per realm, so a backlog spanning realms is priced by each
+  // row's own realm. Each realm is read once: settling a backlog must not
+  // change the price halfway through.
+  const configs = new Map<number, SummonRewards>();
+  const configFor = async (realmId: number): Promise<SummonRewards> => {
+    const cached = configs.get(realmId);
+    if (cached) return cached;
+    const fresh = await getSummonRewards(realmId);
+    configs.set(realmId, fresh);
+    return fresh;
+  };
+
   const bonuses = await bonusMap();
   let paid = 0;
 
   for (const row of rows) {
+    // The rate comes from the summon's own realm; the cap and the pair
+    // cooldown below stay account-wide across realms on purpose, because
+    // shop_balances is one shared wallet — a per-realm cap would let the same
+    // account earn the daily maximum once on every realm.
+    const config = await configFor(Number(row.realm_id) || 1);
     // A bounty on the summoned account multiplies the payout; 0 makes
     // summoning that account worthless, which is the way to shut down a farm
     // without turning rewards off for everyone.

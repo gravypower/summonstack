@@ -163,9 +163,13 @@ local function refresh()
 
   -- Activeness is decided by MySQL so the expiry uses the same clock that
   -- wrote ends_at, rather than the worldserver's.
+  -- Keyed by realm: each realm has its own row, so one realm can run an
+  -- event while another does not. Reading id = 1 unconditionally meant every
+  -- realm mirrored realm 1 and no other realm's row could ever take effect.
   local query = WorldDBQuery(string.format(
     "SELECT (enabled = 1 AND (ends_at IS NULL OR ends_at > NOW())), " ..
-    "multiplier_pct, aura_spell, name FROM `%s`.xp_event WHERE id = 1", WEB_DB))
+    "multiplier_pct, aura_spell, name FROM `%s`.xp_event WHERE id = %u",
+    WEB_DB, REALM_ID))
   if not query then
     return
   end
@@ -203,7 +207,7 @@ local function refresh()
   -- Heartbeat, so the admin panel can tell the difference between "the event
   -- is off" and "this script never loaded".
   WorldDBExecute(string.format(
-    "UPDATE `%s`.xp_event SET seen_at = NOW() WHERE id = 1", WEB_DB))
+    "UPDATE `%s`.xp_event SET seen_at = NOW() WHERE id = %u", WEB_DB, REALM_ID))
 end
 
 -- ── Hooks ──────────────────────────────────────────────────────────────────

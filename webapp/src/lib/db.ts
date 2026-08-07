@@ -195,7 +195,9 @@ const SUMMON_DDL = [
      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
      PRIMARY KEY (account_id)
    ) ENGINE=InnoDB`,
-  // Single row, read by the Lua script every 15s. updated_at is written
+  // One row per realm, keyed by realm id, read by that realm's Lua script
+  // every 15s — so a playerbots realm can pay differently, or not at all,
+  // without touching the main realm's economy. updated_at is written
   // explicitly rather than ON UPDATE, so the script's seen_at heartbeat does
   // not look like an admin edit.
   `CREATE TABLE IF NOT EXISTS \`__WEB_DB__\`.summon_rewards (
@@ -241,12 +243,18 @@ export async function ensureWebDb(): Promise<void> {
         // (the table and its foreign key target).
         await pool.query(ddl.replaceAll("__WEB_DB__", WEB_DB));
       }
+      // Seeds the two realms a stock install has. Realms added later get
+      // their row from the first admin save (saveSummonRewards upserts). Until
+      // then getSummonRewards() returns the built-in DEFAULTS for them — which
+      // do pay, at 5 points a summon — rather than inheriting realm 1's row.
       await pool.query(
         `INSERT IGNORE INTO \`${WEB_DB}\`.summon_rewards (id) VALUES (1), (2)`
       );
-      // Single row per realm, read by worldserver/lua_scripts/xp.lua.
-      // updated_at is written explicitly rather than ON UPDATE: the Lua script
-      // touches seen_at every few seconds and must not look like an edit.
+      // One row per realm, keyed by realm id, read by that realm's copy of
+      // worldserver/lua_scripts/xp.lua — so one realm can run an event while
+      // another does not. updated_at is written explicitly rather than ON
+      // UPDATE: the Lua script touches seen_at every few seconds and must not
+      // look like an edit.
       await pool.query(
         `CREATE TABLE IF NOT EXISTS \`${WEB_DB}\`.xp_event (
            id TINYINT UNSIGNED NOT NULL DEFAULT 1,
@@ -261,6 +269,8 @@ export async function ensureWebDb(): Promise<void> {
            PRIMARY KEY (id)
          ) ENGINE=InnoDB`
       );
+      // Same as summon_rewards above: later realms get their row on first
+      // save, and until then their event simply reads as off.
       await pool.query(
         `INSERT IGNORE INTO \`${WEB_DB}\`.xp_event (id) VALUES (1), (2)`
       );

@@ -123,24 +123,31 @@ export default function AdminSummonsPage() {
   );
   const [bonusBusy, setBonusBusy] = useState(false);
 
-  const load = useCallback(async (reseed: boolean) => {
-    const res = await fetch("/api/admin/summons");
+  // Each realm has its own rewards row, so the form always edits one realm.
+  // Stats, recent summons and bounties stay portal-wide.
+  const [realms, setRealms] = useState<{ id: number; name: string }[]>([]);
+  const [realmId, setRealmId] = useState(1);
+
+  const load = useCallback(async (reseed: boolean, forRealm: number) => {
+    const res = await fetch(`/api/admin/summons?realmId=${forRealm}`);
     if (!res.ok) return;
     const data = await res.json();
     setRewards(data.rewards);
+    setRealms(data.realms ?? []);
     setStats(data.stats);
     setRecent(data.recent);
     setBonuses(data.bonuses ?? []);
-    // Only reseed the form on first load and after a save, so the poll cannot
-    // yank a field out from under the admin.
+    // Only reseed the form on first load, after a save, and when the realm
+    // changes, so the poll cannot yank a field out from under the admin.
     if (reseed) setDraft(draftFrom(data.rewards));
   }, []);
 
   useEffect(() => {
-    load(true);
-    const timer = setInterval(() => load(false), 10000);
+    // Switching realms reseeds: the form is now showing a different row.
+    load(true, realmId);
+    const timer = setInterval(() => load(false, realmId), 10000);
     return () => clearInterval(timer);
-  }, [load]);
+  }, [load, realmId]);
 
   async function save(enabled: boolean) {
     if (!draft) return;
@@ -150,6 +157,7 @@ export default function AdminSummonsPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        realmId,
         enabled,
         pointsPerSummon: Number(draft.pointsPerSummon),
         dailyPointCap: Number(draft.dailyPointCap),
@@ -171,7 +179,7 @@ export default function AdminSummonsPage() {
         ? `Saved — a summon is worth ${data.rewards.pointsPerSummon} points. The game picks this up within 15 seconds.`
         : "Saved. Summons are still counted, but they no longer pay points.",
     });
-    load(false);
+    load(false, realmId);
   }
 
   async function addBonus(e: React.FormEvent) {
@@ -228,6 +236,29 @@ export default function AdminSummonsPage() {
   return (
     <>
       {msg && <div className={`msg ${msg.ok ? "ok" : "error"}`}>{msg.text}</div>}
+
+      {realms.length > 1 && (
+        <div className="card" style={{ marginBottom: "1rem" }}>
+          <label>
+            Realm
+            <select
+              value={realmId}
+              onChange={(e) => setRealmId(Number(e.target.value))}
+            >
+              {realms.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="muted" style={{ marginBottom: 0, fontSize: "0.875rem" }}>
+            What a summon pays is set per realm. Saving here changes {
+              realms.find((r) => r.id === realmId)?.name ?? "this realm"
+            } only — the totals and bounties below cover every realm.
+          </p>
+        </div>
+      )}
 
       {!rewards.worldserverReading && (
         <div className="msg error">
