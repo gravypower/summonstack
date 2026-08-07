@@ -1,7 +1,7 @@
 # SummonStack — AzerothCore (WotLK 3.3.5a) + web portal, all in Docker Compose.
 #
 # Quickstart:
-#   1. copy .env.example to .env and edit the secrets
+#   1. copy .env.sample to .env and edit the secrets
 #   2. docker compose up -d
 #   3. see README.md for creating the first admin account
 #
@@ -82,16 +82,25 @@ services:
         condition: service_completed_successfully
 
   # Player portal + admin site (Next.js).
+  #
+  # Built and run as a production image. It used to run `next dev`, which
+  # recompiles on every request, ships unminified bundles and serves the dev
+  # error overlay — stack traces and all — to whoever hits a 500.
+  #
+  # Hot reload lives in docker-compose.dev.yml, selected by WEBAPP_MODE in
+  # .env — `task dev` to switch, `task mode` to see which is active. Setting it
+  # there rather than passing -f to one command is what keeps every other task
+  # acting on the same mode.
   ac-webapp:
     container_name: ac-webapp
     build:
       context: ./webapp
-      target: dev
+      target: runner
     networks:
       - ac-network
     restart: unless-stopped
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       DB_HOST: ac-database
       DB_PORT: "3306"
       DB_USER: root
@@ -111,17 +120,11 @@ services:
       ZEROTIER_NETWORK_ID: ${ZEROTIER_NETWORK_ID:-}
     volumes:
       # The realm manifest, rendered from realms.yml by `task realm:render`.
+      # Read at runtime, so it stays a mount rather than being baked in.
       # Without it the portal falls back to guessing each realm's databases and
       # worldserver from its id, which no longer matches what the compose
       # generator produces — it logs a warning per realm when that happens.
       - ./webapp/generated:/app/generated:ro
-      - ./webapp/src:/app/src
-      - ./webapp/public:/app/public
-      - ./webapp/data:/app/data
-      - ./webapp/scripts:/app/scripts
-      - ./webapp/package.json:/app/package.json
-      - /app/node_modules
-    command: ["npm", "run", "dev"]
     ports:
       - ${DOCKER_WEB_EXTERNAL_PORT:-8080}:3000
     depends_on:

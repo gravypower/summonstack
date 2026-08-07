@@ -9,6 +9,7 @@ import { errorResponse, HttpError } from "@/lib/auth";
 import { ensureWebDb, getPool, WEB_DB } from "@/lib/db";
 import {
   createSessionToken,
+  passwordFingerprint,
   SESSION_COOKIE,
   sessionCookieOptions,
 } from "@/lib/session";
@@ -45,9 +46,9 @@ export async function POST(req: Request): Promise<Response> {
       );
     }
 
-    let accountId: number;
+    let created: { id: number; salt: Buffer };
     try {
-      accountId = await createGameAccount(username, password, cleanEmail);
+      created = await createGameAccount(username, password, cleanEmail);
     } catch (err) {
       // Release the invite if account creation raced or failed.
       await pool.query(
@@ -63,7 +64,11 @@ export async function POST(req: Request): Promise<Response> {
     const store = await cookies();
     store.set(
       SESSION_COOKIE,
-      createSessionToken(accountId, username.toUpperCase()),
+      createSessionToken(
+        created.id,
+        username.toUpperCase(),
+        passwordFingerprint(created.salt)
+      ),
       sessionCookieOptions()
     );
     return Response.json({ ok: true });

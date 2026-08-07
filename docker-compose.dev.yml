@@ -1,0 +1,32 @@
+# Hot-reload overlay for working on the portal.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#   task dev        # the same, and keeps the generated realm override
+#
+# This is what docker-compose.yml used to do by default. It is an overlay
+# rather than the default because `next dev` recompiles on every request,
+# serves unminified bundles, and shows the dev error overlay — including stack
+# traces — to whoever hits a 500. Fine on a laptop, not on a public portal.
+#
+# Everything else (databases, realms, downloads) comes from the base file.
+
+services:
+  ac-webapp:
+    build:
+      target: dev
+    environment:
+      NODE_ENV: development
+    command: ["npm", "run", "dev"]
+    volumes:
+      # Re-declared because compose replaces the whole `volumes` list rather
+      # than merging it: the manifest mount from the base file has to be
+      # repeated here or the portal falls back to guessing realm endpoints.
+      - ./webapp/generated:/app/generated:ro
+      - ./webapp/src:/app/src
+      - ./webapp/public:/app/public
+      - ./webapp/data:/app/data
+      - ./webapp/scripts:/app/scripts
+      - ./webapp/package.json:/app/package.json
+      # Anonymous volume: keeps the image's node_modules rather than letting an
+      # empty (or host-arch) directory shadow them.
+      - /app/node_modules

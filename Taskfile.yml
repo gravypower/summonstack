@@ -17,6 +17,29 @@ vars:
   ACORE_DBS: acore_auth acore_world acore_characters
   SS: python3 -m scripts.summonstack
 
+  # Which compose files every task in this file uses.
+  #
+  # WEBAPP_MODE in .env decides whether the portal runs as a production build
+  # or a hot-reload dev server. Computed once here and exported as COMPOSE_FILE
+  # below, so `task logs`, `task rebuild`, `task restart` and everything else
+  # act on the mode you are actually in — passing -f to `up` alone meant the
+  # next task quietly recreated the container in the other mode.
+  #
+  # The generated realm override is normally auto-loaded, but setting
+  # COMPOSE_FILE turns that off, so it is listed explicitly when it exists.
+  COMPOSE_FILES:
+    sh: |
+      files="docker-compose.yml"
+      [ -f docker-compose.override.yml ] && files="$files:docker-compose.override.yml"
+      mode=$(grep -E '^WEBAPP_MODE=' .env 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
+      [ "$mode" = "dev" ] && files="$files:docker-compose.dev.yml"
+      echo "$files"
+
+env:
+  # Docker Compose reads this, so every `docker compose` below picks up the
+  # mode without needing -f flags of its own.
+  COMPOSE_FILE: "{{.COMPOSE_FILES}}"
+
 includes:
   admin:
     taskfile: ./tasks/admin.yml
@@ -83,6 +106,42 @@ tasks:
       - task: realm:apply
         vars: {WAIT: "900"}
       - task: ps
+
+  # ── Portal mode ───────────────────────────────────────────────────────────
+  # WEBAPP_MODE in .env decides how the portal container runs. It is read by
+  # every task through COMPOSE_FILE at the top of this file, so switching is
+  # one command and stays switched.
+
+  mode:
+    desc: Show whether the portal runs in prod or dev mode
+    silent: true
+    cmds:
+      - "{{.SS}} webapp-mode"
+
+  dev:
+    desc: Switch the portal to hot-reload mode and restart it
+    cmds:
+      - "{{.SS}} webapp-mode dev"
+      # Re-read .env: the mode just changed, so COMPOSE_FILE computed when this
+      # run started is now stale.
+      - task: webapp-recreate
+
+  prod:
+    desc: Switch the portal to the production build and restart it
+    cmds:
+      - "{{.SS}} webapp-mode prod"
+      - task: webapp-recreate
+
+  webapp-recreate:
+    internal: true
+    cmds:
+      - |
+        files="docker-compose.yml"
+        [ -f docker-compose.override.yml ] && files="$files:docker-compose.override.yml"
+        mode=$(grep -E '^WEBAPP_MODE=' .env 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
+        [ "$mode" = "dev" ] && files="$files:docker-compose.dev.yml"
+        COMPOSE_FILE="$files" docker compose up -d --build --no-deps ac-webapp
+        echo "portal is now in ${mode:-prod} mode"
 
   down:
     desc: Stop the stack (keeps all data)

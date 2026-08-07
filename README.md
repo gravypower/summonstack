@@ -320,7 +320,7 @@ byte-compile of `scripts/` — see `.github/workflows/ci.yml`.
 ## First-time setup
 
 **1. Configure secrets.** A `.env` was generated with random values — review
-it (or copy `.env.example` to `.env` and fill it in yourself).
+it (or copy `.env.sample` to `.env` and fill it in yourself).
 
 **2. Start the stack:**
 
@@ -519,6 +519,12 @@ docker compose up -d
 
 ## Security notes
 
+- `SESSION_SECRET` is **required** — the stack refuses to start without it,
+  and the portal refuses to sign a cookie with a value shorter than 16
+  characters or with either of the old example values. The cookie carries an
+  account id and admin rights are read live for whatever it claims, so a
+  guessable signing key is an admin takeover. Generate one with
+  `openssl rand -base64 32`.
 - Keep `.env` private — it holds the DB root password, session-signing
   secret, and SOAP credentials. It is `.gitignore`d.
 - MySQL (3306) and SOAP (7878) are bound to `127.0.0.1` on the host on
@@ -526,3 +532,42 @@ docker compose up -d
 - If you put the site on the public internet, run it behind a reverse proxy
   with HTTPS (Caddy/Traefik/nginx) and set `SITE_URL=https://…` so session
   cookies are marked `Secure`.
+- Sessions are revocable. Every authenticated request re-checks the account,
+  so banning someone or resetting their password ends their portal session
+  immediately rather than whenever the seven-day cookie expires. Changing your
+  own password keeps you signed in and drops your other sessions.
+- The portal defaults to a production build. `task dev` switches it to hot
+  reload — convenient locally, but `next dev` serves stack traces in its error
+  overlay, so it is not what a host people can reach should run.
+
+## Portal mode: dev or prod
+
+The portal container runs one of two ways, chosen by `WEBAPP_MODE` in `.env`:
+
+| Mode | What runs | Use it for |
+|------|-----------|------------|
+| `prod` (default) | the built image, `node server.js` | anything others can reach |
+| `dev` | `next dev` with `webapp/src` bind-mounted | working on the portal |
+
+Switch with one command — it edits `.env` and recreates just the portal:
+
+```bash
+task dev      # hot reload
+task prod     # production build
+task mode     # which one is active right now
+```
+
+The mode lives in `.env` rather than in a flag because **every** task reads it:
+`task up`, `task logs`, `task restart`, `task rebuild` all act on the mode you
+are in. Passing `-f docker-compose.dev.yml` to `up` alone would have left the
+next command quietly recreating the container in the other mode.
+
+Under the hood the Taskfile turns `WEBAPP_MODE` into `COMPOSE_FILE`. That also
+disables compose's automatic loading of `docker-compose.override.yml`, so the
+generated realm file is listed explicitly — if you run `docker compose`
+directly rather than through `task`, pass the same list:
+
+```bash
+COMPOSE_FILE=docker-compose.yml:docker-compose.override.yml:docker-compose.dev.yml \
+  docker compose ps
+```

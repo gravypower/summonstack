@@ -1,7 +1,9 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN --mount=type=cache,target=/root/.npm npm install
+# npm ci, not npm install: the lockfile is committed, so an image build gets
+# the exact tree CI tested rather than whatever resolves that day.
+COPY package.json package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 # Maintenance scripts in scripts/ run outside the Next.js bundle, so they
 # cannot use its bundled mysql2 and the standalone output does not trace it.

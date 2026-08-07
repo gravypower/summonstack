@@ -4,6 +4,7 @@ import { errorResponse, HttpError } from "@/lib/auth";
 import { verifyPassword } from "@/lib/srp6";
 import {
   createSessionToken,
+  passwordFingerprint,
   SESSION_COOKIE,
   sessionCookieOptions,
 } from "@/lib/session";
@@ -29,7 +30,11 @@ export async function POST(req: Request): Promise<Response> {
     const store = await cookies();
     store.set(
       SESSION_COOKIE,
-      createSessionToken(account.id, account.username),
+      createSessionToken(
+        account.id,
+        account.username,
+        passwordFingerprint(account.salt)
+      ),
       sessionCookieOptions()
     );
     return Response.json({ ok: true, username: account.username });

@@ -39,8 +39,8 @@ def setup_env() -> int:
         print(".env already exists.")
         return 0
 
-    if os.path.exists(".env.example"):
-        shutil.copy(".env.example", ".env")
+    if os.path.exists(".env.sample"):
+        shutil.copy(".env.sample", ".env")
     else:
         with open(".env", "w", encoding="utf-8") as f:
             f.write("DOCKER_DB_ROOT_PASSWORD=password\nSESSION_SECRET=\n")
@@ -55,6 +55,58 @@ def setup_env() -> int:
     os.chmod(".env", 0o600)
     print("Wrote .env with a random SESSION_SECRET.")
     print("DOCKER_DB_ROOT_PASSWORD left as default to match existing MySQL volume if present.")
+    return 0
+
+
+VALID_WEBAPP_MODES = ("prod", "dev")
+
+
+def webapp_mode(mode: str | None = None) -> int:
+    """Show or set WEBAPP_MODE in .env.
+
+    The mode decides whether the portal container runs the production build or
+    a hot-reload dev server. It lives in .env rather than in a task argument so
+    every `docker compose` invocation agrees on it — the Taskfile turns it into
+    COMPOSE_FILE, and a mode passed to one command only would have left the
+    next command recreating the container in the other mode.
+    """
+    if not os.path.exists(".env"):
+        print("No .env yet. Run: task setup", file=sys.stderr)
+        return 1
+
+    with open(".env", "r", encoding="utf-8") as f:
+        content = f.read()
+
+    current = "prod"
+    found = re.search(r"^WEBAPP_MODE=(.*)$", content, re.MULTILINE)
+    if found:
+        current = found.group(1).strip().strip('"') or "prod"
+
+    if mode is None:
+        print(current)
+        if current == "dev":
+            print(
+                "  portal runs `next dev`: hot reload, unminified, and the dev\n"
+                "  error overlay shows stack traces. Fine locally, not on a\n"
+                "  public host. Switch with: task prod",
+                file=sys.stderr,
+            )
+        return 0
+
+    if mode not in VALID_WEBAPP_MODES:
+        print(f"Mode must be one of: {', '.join(VALID_WEBAPP_MODES)}", file=sys.stderr)
+        return 1
+
+    if found:
+        content = re.sub(r"^WEBAPP_MODE=.*$", f"WEBAPP_MODE={mode}", content, flags=re.MULTILINE)
+    else:
+        content = content.rstrip() + f"\n\n# prod = production build; dev = hot reload (see README)\nWEBAPP_MODE={mode}\n"
+
+    with open(".env", "w", encoding="utf-8") as f:
+        f.write(content)
+    print(f"WEBAPP_MODE={mode}")
+    if current != mode:
+        print("Run `task up` to rebuild the portal in that mode.")
     return 0
 
 

@@ -30,7 +30,7 @@ test("refuses to sign with a secret an attacker could know", () => {
     const [value, why] = bad;
     withSecret(value, () => {
       assert.throws(
-        () => session.createSessionToken(1, "ADMIN"),
+        () => session.createSessionToken(1, "ADMIN", "fp"),
         /SESSION_SECRET/,
         `expected ${why} to be refused`
       );
@@ -41,24 +41,25 @@ test("refuses to sign with a secret an attacker could know", () => {
 test("a real secret round-trips a session", () => {
   withSecret(GOOD_SECRET, () => {
     const parsed = session.parseSessionToken(
-      session.createSessionToken(42, "PLAYER")
+      session.createSessionToken(42, "PLAYER", "fp")
     );
     assert.equal(parsed.accountId, 42);
     assert.equal(parsed.username, "PLAYER");
+    assert.equal(parsed.pv, "fp");
     assert.ok(parsed.exp > Math.floor(Date.now() / 1000));
   });
 });
 
 test("rejects a tampered signature", () => {
   withSecret(GOOD_SECRET, () => {
-    const token = session.createSessionToken(42, "PLAYER");
+    const token = session.createSessionToken(42, "PLAYER", "fp");
     assert.equal(session.parseSessionToken(token.slice(0, -1) + "x"), null);
   });
 });
 
 test("rejects a token signed with a different secret", () => {
   const token = withSecret(GOOD_SECRET, () =>
-    session.createSessionToken(1, "ADMIN")
+    session.createSessionToken(1, "ADMIN", "fp")
   );
   withSecret("a-completely-different-long-secret", () => {
     assert.equal(session.parseSessionToken(token), null);
@@ -68,7 +69,7 @@ test("rejects a token signed with a different secret", () => {
 test("rejects an expired token", () => {
   withSecret(GOOD_SECRET, () => {
     const body = Buffer.from(
-      JSON.stringify({ accountId: 1, username: "A", exp: 1 })
+      JSON.stringify({ accountId: 1, username: "A", pv: "fp", exp: 1 })
     ).toString("base64url");
     const sig = createHmac("sha256", GOOD_SECRET).update(body).digest("base64url");
     assert.equal(session.parseSessionToken(`${body}.${sig}`), null);
@@ -98,4 +99,29 @@ test("cookie is httpOnly, and secure only when the site is https", () => {
     if (before === undefined) delete process.env.SITE_URL;
     else process.env.SITE_URL = before;
   }
+});
+
+// A cookie is only revocable if it carries something that changes when the
+// password does. Tokens minted before that field existed cannot be checked,
+// so they are refused rather than trusted.
+test("a token with no password fingerprint is refused", () => {
+  withSecret(GOOD_SECRET, () => {
+    const body = Buffer.from(
+      JSON.stringify({
+        accountId: 1,
+        username: "A",
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      })
+    ).toString("base64url");
+    const sig = createHmac("sha256", GOOD_SECRET).update(body).digest("base64url");
+    assert.equal(session.parseSessionToken(`${body}.${sig}`), null);
+  });
+});
+
+test("the fingerprint changes with the salt, and is short and url-safe", () => {
+  const a = session.passwordFingerprint(Buffer.alloc(32, 1));
+  const b = session.passwordFingerprint(Buffer.alloc(32, 2));
+  assert.notEqual(a, b, "a new salt must produce a new fingerprint");
+  assert.equal(session.passwordFingerprint(Buffer.alloc(32, 1)), a, "stable");
+  assert.match(a, /^[A-Za-z0-9_-]{12}$/);
 });
